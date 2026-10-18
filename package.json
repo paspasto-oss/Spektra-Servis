@@ -16,6 +16,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@azure/msal-browser": "5.25.1",
     "pdfjs-dist": "6.4.299"
   }
 }

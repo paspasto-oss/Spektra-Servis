@@ -34,6 +34,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const onedrive_js_1 = require("./lib/onedrive.js");
 const commerce_js_1 = require("./lib/commerce.js");
 const commerce_js_2 = require("./modules/commerce.js");
 const google_calendar_js_1 = require("./lib/google-calendar.js");
@@ -57,6 +58,7 @@ let state = { route: 'home', query: '', filter: '', customerTab: 'customers', se
 const root = document.querySelector('#app');
 const dialog = document.querySelector('#editor');
 const toastElement = document.querySelector('#toast');
+let oneDriveBusy = false;
 let integrationBusy = false, costJobId = '', costRevision = 0, costLines = [];
 let pendingEditor = null;
 let toastTimer;
@@ -160,6 +162,8 @@ async function saveEditor(form) {
         openEditor(continuation.type, '', { ...continuation.extra, customerId: newCustomerId });
 }
 async function switchWorkspace(workspace) {
+    if (oneDriveBusy)
+        throw Error('Počkajte na dokončenie prenosu OneDrive.');
     if (dialog.open && !closeEditor())
         return;
     const newData = await (0, store_js_1.load)(workspace);
@@ -169,6 +173,48 @@ async function switchWorkspace(workspace) {
 }
 async function act(action, el) {
     const id = el.dataset.id || '';
+    if (action.startsWith('onedrive-')) {
+        if (state.workspace !== 'real')
+            throw Error('OneDrive je dostupný iba vo vlastnom pracovnom priestore.');
+        if (dirty || busy)
+            throw Error('Najskôr uložte rozpracovaný formulár.');
+        if (oneDriveBusy)
+            throw Error('Počkajte na dokončenie požiadavky OneDrive.');
+        oneDriveBusy = true;
+        const buttons = Array.from(document.querySelectorAll('[data-action^="onedrive-"]'));
+        buttons.forEach(b => b.disabled = true);
+        try {
+            if (action === 'onedrive-config-save') {
+                await (0, onedrive_js_1.saveOneDriveClientId)(document.querySelector('#onedrive-client-id')?.value || '');
+                message('Nastavenie uložené. Kliknite Pripojiť OneDrive.');
+            }
+            if (action === 'onedrive-connect') {
+                await (0, onedrive_js_1.connectOneDrive)();
+                message('OneDrive bol pripojený. Teraz môžete uložiť zálohu.');
+            }
+            if (action === 'onedrive-disconnect') {
+                await (0, onedrive_js_1.disconnectOneDrive)();
+                message('Relácia odpojená. Zálohy zostali v OneDrive.');
+            }
+            if (action === 'onedrive-backup') {
+                const input = document.querySelector('#onedrive-password'), password = input?.value || '';
+                if (input)
+                    input.value = '';
+                const next = structuredClone(data), revision = data.revision;
+                next.lastBackup = new Date().toISOString();
+                const name = await (0, onedrive_js_1.uploadOneDriveBackup)(next, password);
+                if (state.workspace === 'real' && data.revision === revision)
+                    await commit(next, revision);
+                message('Šifrovaná záloha uložená: ' + name);
+            }
+            render();
+        }
+        finally {
+            oneDriveBusy = false;
+            buttons.forEach(b => b.disabled = false);
+        }
+        return;
+    }
     if (action === 'open-quotes' || action === 'open-rs2') {
         window.open(commerce_js_1.APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer');
         return;
@@ -501,7 +547,7 @@ window.addEventListener('hashchange', () => { const route = location.hash.slice(
     state.selectedCustomer = '';
     render();
 } });
-window.addEventListener('beforeunload', event => { if (dirty || busy) {
+window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy) {
     event.preventDefault();
     event.returnValue = '';
 } });
@@ -530,6 +576,8 @@ async function setupPwa() {
     }
 }
 async function init() {
+    if ((0, onedrive_js_1.oneDriveClientId)())
+        void (0, onedrive_js_1.prepareOneDrive)().catch(() => { });
     if ((0, google_calendar_js_1.googleClientId)())
         void (0, google_calendar_js_1.prepareGoogle)().catch(() => { });
     try {
@@ -1193,6 +1241,127 @@ async function writeManual(manual) {
 }
 
 },
+"lib/onedrive.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ONE_DRIVE_REDIRECT = exports.ONE_DRIVE_SCOPE = void 0;
+exports.oneDriveClientId = oneDriveClientId;
+exports.oneDriveState = oneDriveState;
+exports.validClientId = validClientId;
+exports.saveOneDriveClientId = saveOneDriveClientId;
+exports.prepareOneDrive = prepareOneDrive;
+exports.connectOneDrive = connectOneDrive;
+exports.disconnectOneDrive = disconnectOneDrive;
+exports.backupFilename = backupFilename;
+exports.uploadOneDriveBackup = uploadOneDriveBackup;
+const backup_js_1 = require("./backup.js");
+const KEY = 'spektra-onedrive-client-id';
+exports.ONE_DRIVE_SCOPE = 'https://graph.microsoft.com/Files.ReadWrite.AppFolder';
+exports.ONE_DRIVE_REDIRECT = 'https://spektra-servis.vercel.app/onedrive-callback.html';
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+let client = null, account = null, rootId = '', initialization = null;
+let lastFile = '';
+function oneDriveClientId() { return localStorage.getItem(KEY) || ''; }
+function oneDriveState() { return { connected: !!account && !!rootId, account: account?.username || account?.name || '', lastFile }; }
+function validClientId(value) { const id = value.trim(); if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))
+    throw Error('Vložte Application (client) ID z Microsoft registrácie – identifikátor vo formáte UUID.'); return id; }
+async function saveOneDriveClientId(value) { const id = validClientId(value); await disconnectOneDrive(); localStorage.setItem(KEY, id); client = null; initialization = null; await prepareOneDrive(); }
+function library() {
+    if (window.msal)
+        return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = './vendor/msal-browser.min.js';
+        s.async = true;
+        let done = false;
+        const finish = (error) => { if (done)
+            return; done = true; clearTimeout(timer); if (error) {
+            s.remove();
+            reject(error);
+        }
+        else
+            resolve(); };
+        const timer = setTimeout(() => finish(Error('Knižnica Microsoft sa nenačítala. Obnovte aplikáciu a skúste znova.')), 20000);
+        s.onload = () => finish(window.msal ? undefined : Error('Knižnica Microsoft nie je dostupná.'));
+        s.onerror = () => finish(Error('Nepodarilo sa načítať prihlásenie Microsoft.'));
+        document.head.append(s);
+    });
+}
+function prepareOneDrive() {
+    if (initialization)
+        return initialization;
+    initialization = (async () => {
+        if (location.origin !== 'https://spektra-servis.vercel.app')
+            throw Error('OneDrive pripájajte z produkčnej adresy spektra-servis.vercel.app.');
+        const id = validClientId(oneDriveClientId());
+        await library();
+        client = new window.msal.PublicClientApplication({ auth: { clientId: id, authority: 'https://login.microsoftonline.com/consumers', redirectUri: exports.ONE_DRIVE_REDIRECT }, cache: { cacheLocation: 'memoryStorage' }, system: { loggerOptions: { piiLoggingEnabled: false } } });
+        await client.initialize();
+    })();
+    initialization.catch(() => { initialization = null; client = null; });
+    return initialization;
+}
+async function accessToken() {
+    if (!client || !account)
+        throw Error('Najskôr pripojte OneDrive.');
+    try {
+        return (await client.acquireTokenSilent({ account, scopes: [exports.ONE_DRIVE_SCOPE] })).accessToken;
+    }
+    catch {
+        throw Error('Prístup k OneDrivu vypršal. Kliknite Pripojiť / zmeniť účet a potvrďte prihlásenie.');
+    }
+}
+async function graph(path, init = {}) {
+    if (!path.startsWith('/me/drive/'))
+        throw Error('Neplatná cesta OneDrive.');
+    const response = await fetch(GRAPH + path, { ...init, headers: { ...init.headers, Authorization: 'Bearer ' + await accessToken() }, signal: AbortSignal.timeout(60000) });
+    if (!response.ok) {
+        const reason = response.status === 401 ? 'Prihlásenie vypršalo; pripojte účet znova.' : response.status === 403 ? 'Microsoft nepovolil prístup k priečinku aplikácie. Skontrolujte oprávnenie Files.ReadWrite.AppFolder.' : response.status === 429 ? 'OneDrive je dočasne vyťažený. Skúste neskôr.' : response.status === 507 ? 'OneDrive nemá dostatok voľného miesta.' : 'OneDrive neuložil požiadavku (HTTP ' + response.status + ').';
+        throw Error(reason);
+    }
+    return response.json();
+}
+async function connectOneDrive() {
+    await prepareOneDrive();
+    const response = await client.loginPopup({ scopes: [exports.ONE_DRIVE_SCOPE], prompt: 'select_account', redirectUri: exports.ONE_DRIVE_REDIRECT });
+    if (!response.account)
+        throw Error('Microsoft nevrátil prihlásený účet.');
+    account = response.account;
+    rootId = '';
+    lastFile = '';
+    try {
+        const root = await graph('/me/drive/special/approot');
+        if (typeof root.id !== 'string' || !root.folder)
+            throw Error('Priečinok aplikácie na OneDrive nie je dostupný.');
+        rootId = root.id;
+    }
+    catch (error) {
+        await disconnectOneDrive();
+        throw error;
+    }
+}
+async function disconnectOneDrive() { const old = account; account = null; rootId = ''; lastFile = ''; if (client)
+    await client.clearCache(old ? { account: old } : undefined); }
+function backupFilename(now = new Date()) { return 'Spektra-zaloha-' + now.toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomUUID().slice(0, 8) + '.spektra'; }
+async function uploadOneDriveBackup(data, password) {
+    if (!account || !rootId)
+        throw Error('Najskôr pripojte OneDrive.');
+    if (password.length < 10)
+        throw Error('Pre cloudovú zálohu zadajte heslo s aspoň 10 znakmi. Heslo si bezpečne uložte.');
+    const owner = account.homeAccountId, folder = rootId, content = await (0, backup_js_1.exportBackup)(data, password);
+    if (new TextEncoder().encode(content).length > 25 * 1024 * 1024)
+        throw Error('Záloha je väčšia ako 25 MB. Ukladanie sa nespustilo.');
+    if (account?.homeAccountId !== owner || rootId !== folder)
+        throw Error('Pripojený účet sa zmenil. Zálohu zopakujte.');
+    const name = backupFilename();
+    const result = await graph('/me/drive/items/' + encodeURIComponent(folder) + ':/' + encodeURIComponent(name) + ':/content', { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: content });
+    if (typeof result.id !== 'string' || result.name !== name || typeof result.size !== 'number' || result.size !== new TextEncoder().encode(content).length)
+        throw Error('OneDrive nepotvrdil celý súbor. Overte zálohu v OneDrive.');
+    lastFile = name;
+    return name;
+}
+
+},
 "lib/store.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -1583,19 +1752,34 @@ async function uploadManual(form) {
 }
 
 },
+"modules/onedrive-settings.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.oneDriveSettings = oneDriveSettings;
+const onedrive_js_1 = require("../lib/onedrive.js");
+const ui_js_1 = require("../ui.js");
+function oneDriveSettings(demo) {
+    if (demo)
+        return '<section class="panel settings-panel"><h2>OneDrive</h2><p>Pripojenie je dostupné vo vlastnom pracovnom priestore.</p></section>';
+    const state = (0, onedrive_js_1.oneDriveState)(), configured = !!(0, onedrive_js_1.oneDriveClientId)();
+    return `<section class="panel settings-panel full"><div class="panel-head"><h2>OneDrive · Microsoft 365 Family</h2><span class="tag">${state.connected ? 'Pripojené' : 'Nepripojené'}</span></div><p>Šifrované zálohy zákaziek, kontaktov, skladových kariet a kalkulácií sa ukladajú do priečinka aplikácie v OneDrive. PDF návody a fotografie zatiaľ nie sú súčasťou tejto zálohy.</p>${state.connected ? `<p><strong>Účet: ${(0, ui_js_1.e)(state.account)}</strong></p>${(0, ui_js_1.field)('Heslo cloudovej zálohy', 'oneDrivePassword', '', 'password', 'id="onedrive-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez tohto hesla zálohu neobnovíte. Heslo sa neukladá.')}<div class="button-row">${(0, ui_js_1.button)('Uložiť šifrovanú zálohu', 'onedrive-backup', 'upload', 'btn primary')}${(0, ui_js_1.button)('Odpojiť reláciu', 'onedrive-disconnect', '', 'btn secondary')}</div>` : ''}${configured ? (0, ui_js_1.button)(state.connected ? 'Pripojiť / zmeniť účet' : 'Pripojiť OneDrive', 'onedrive-connect', '', 'btn secondary') : ''}${state.lastFile ? `<p class="notice">Uložený súbor: ${(0, ui_js_1.e)(state.lastFile)}</p>` : ''}<p class="tiny muted">Záloha sa vytvára na kliknutie. Údaje aplikácie sa automaticky nesynchronizujú medzi zariadeniami. Prihlásenie platí počas otvorenia tejto stránky; po obnovení sa pripojte znova. Odpojenie relácie nemaže súbory ani udelený súhlas.</p><a class="btn ghost" href="https://onedrive.live.com/" target="_blank" rel="noopener noreferrer">Otvoriť OneDrive</a><details ${configured ? '' : 'open'}><summary>Prvé nastavenie OneDrive</summary><p>V Microsoft Entra vytvorte registráciu <strong>Spektra Servis</strong> pre osobné Microsoft účty. Pridajte platformu <strong>Single-page application (SPA)</strong> s návratovou adresou:</p><p><code>${onedrive_js_1.ONE_DRIVE_REDIRECT}</code></p><p>Microsoft Graph → Delegated permissions → <strong>Files.ReadWrite.AppFolder</strong>. Nepotrebujeme prístup ku všetkým súborom. Nevytvárajte Client secret ani nezapínajte implicitné tokeny.</p>${(0, ui_js_1.field)('Application (client) ID', 'oneDriveClientId', (0, onedrive_js_1.oneDriveClientId)(), 'text', 'id="onedrive-client-id" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"')}${(0, ui_js_1.button)('Uložiť nastavenie OneDrive', 'onedrive-config-save', 'check')}<p><a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Otvoriť registrácie aplikácií Microsoft</a></p></details></section>`;
+}
+
+},
 "modules/settings.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.settingsPage = settingsPage;
+const onedrive_settings_js_1 = require("./onedrive-settings.js");
 const google_settings_js_1 = require("./google-settings.js");
 const domain_js_1 = require("../domain.js");
 const ui_js_1 = require("../ui.js");
 function settingsPage(data, isDemo) {
     const counts = data.customers.length + data.devices.length + data.jobs.length + data.tips.length;
     return (0, ui_js_1.heading)('JEDEN TECHNIK · BEZ PAUŠÁLU', 'Nastavenia a zálohy', 'Vaše dáta zostávajú pod vašou kontrolou.') +
-        `<div class="settings-grid">${(0, google_settings_js_1.googleSettings)(isDemo)}<section class="panel settings-panel"><div class="panel-head"><h2>Pracovný profil</h2>${(0, ui_js_1.icon)('customers')}</div><dl class="detail-list"><dt>Technik</dt><dd>${(0, ui_js_1.e)(data.settings.technician)}</dd><dt>Firma</dt><dd>${(0, ui_js_1.e)(data.settings.company)}</dd><dt>Východisko</dt><dd>${(0, ui_js_1.e)(data.settings.baseAddress)}</dd></dl>${(0, ui_js_1.button)('Upraviť profil', 'edit-settings', 'edit')}</section>
-  <section class="panel settings-panel"><div class="panel-head"><h2>Bezpečnosť údajov</h2>${(0, ui_js_1.icon)('lock')}</div><p>Táto etapa ukladá údaje do IndexedDB v tomto prehliadači. Nie je pripojená ku cloudu ani k pôvodnej RS2. Nie je to ochrana heslom — používajte uzamknuté zariadenie.</p><p class="notice">Vymazanie údajov prehliadača alebo strata zariadenia môže vymazať archív. Údaje sa automaticky neprenesú do iného telefónu.</p><p class="tiny muted">Počet záznamov: ${counts} · veľkosť textových údajov: ${Math.ceil(new TextEncoder().encode(JSON.stringify(data)).length / 1024)} kB</p>${(0, ui_js_1.button)('Požiadať o trvalé úložisko', 'persist-storage', 'shield')}</section>
-  <section class="panel settings-panel"><div class="panel-head"><h2>Export zálohy</h2>${(0, ui_js_1.icon)('download')}</div><p>Export zahŕňa zákazníkov, zariadenia, zákazky, servisné poznatky a profil. Nahraté PDF návody tento export neobsahuje; originály si ponechajte alebo stiahnite z knižnice. Pre osobné údaje odporúčame šifrovanú zálohu.</p>${(0, ui_js_1.field)('Heslo zálohy (voliteľné)', 'backupPassword', '', 'password', 'id="backup-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez hesla sa exportuje čitateľný JSON. Heslo sa neukladá a nedá sa obnoviť.')}<div class="button-row">${(0, ui_js_1.button)('Stiahnuť zálohu', 'export-backup', 'download', 'btn primary')}</div><p class="tiny muted">Súbor uložte mimo tohto zariadenia na bezpečné miesto.</p></section>
+        `<div class="settings-grid">${(0, onedrive_settings_js_1.oneDriveSettings)(isDemo)}${(0, google_settings_js_1.googleSettings)(isDemo)}<section class="panel settings-panel"><div class="panel-head"><h2>Pracovný profil</h2>${(0, ui_js_1.icon)('customers')}</div><dl class="detail-list"><dt>Technik</dt><dd>${(0, ui_js_1.e)(data.settings.technician)}</dd><dt>Firma</dt><dd>${(0, ui_js_1.e)(data.settings.company)}</dd><dt>Východisko</dt><dd>${(0, ui_js_1.e)(data.settings.baseAddress)}</dd></dl>${(0, ui_js_1.button)('Upraviť profil', 'edit-settings', 'edit')}</section>
+  <section class="panel settings-panel"><div class="panel-head"><h2>Bezpečnosť údajov</h2>${(0, ui_js_1.icon)('lock')}</div><p>Táto etapa ukladá údaje do IndexedDB v tomto prehliadači. Zálohu môžete uložiť na OneDrive; zákazky sa zatiaľ automaticky nesynchronizujú. Nie je to ochrana heslom — používajte uzamknuté zariadenie.</p><p class="notice">Vymazanie údajov prehliadača alebo strata zariadenia môže vymazať archív. Údaje sa automaticky neprenesú do iného telefónu.</p><p class="tiny muted">Počet záznamov: ${counts} · veľkosť textových údajov: ${Math.ceil(new TextEncoder().encode(JSON.stringify(data)).length / 1024)} kB</p>${(0, ui_js_1.button)('Požiadať o trvalé úložisko', 'persist-storage', 'shield')}</section>
+  <section class="panel settings-panel"><div class="panel-head"><h2>Export zálohy</h2>${(0, ui_js_1.icon)('download')}</div><p>Export zahŕňa zákazníkov, zariadenia, zákazky, servisné poznatky, skladové karty, kalkulácie a profil. Nahraté PDF návody tento export neobsahuje; originály si ponechajte alebo stiahnite z knižnice. Pre osobné údaje odporúčame šifrovanú zálohu.</p>${(0, ui_js_1.field)('Heslo zálohy (voliteľné)', 'backupPassword', '', 'password', 'id="backup-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez hesla sa exportuje čitateľný JSON. Heslo sa neukladá a nedá sa obnoviť.')}<div class="button-row">${(0, ui_js_1.button)('Stiahnuť zálohu', 'export-backup', 'download', 'btn primary')}</div><p class="tiny muted">Súbor uložte mimo tohto zariadenia na bezpečné miesto.</p></section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Obnovenie zo zálohy</h2>${(0, ui_js_1.icon)('upload')}</div><p>Pred nahradením údajov sa zobrazí počet záznamov na kontrolu. Bez vášho potvrdenia sa nič nemení.</p>${(0, ui_js_1.field)('Heslo pre obnovenie', 'restorePassword', '', 'password', 'id="restore-password" autocomplete="off"')}<label class="field"><span>Súbor zálohy</span><input type="file" id="restore-file" accept=".json,.spektra,application/json"></label>${(0, ui_js_1.button)('Skontrolovať zálohu', 'preview-backup', 'upload')}</section>
   <section class="panel settings-panel full"><div class="panel-head"><div><h2>Moduly aplikácie</h2><p>Verzia ${domain_js_1.APP_VERSION} · prvá funkčná etapa</p></div><span class="badge done"><i></i>Lokálna verzia</span></div><div class="module-grid">${[['Prehľad a štatistiky', 'Hotové', 'Počty zákaziek a blížiace sa servisy.'], ['Zákazníci a zariadenia', 'Hotové', 'Evidencia, úpravy, archív a história.'], ['Zákazky a kalendár', 'Hotové', 'Termíny, stavy, konflikty, export .ics.'], ['Rady, poruchy a kódy', 'Hotové', 'Vlastné záznamy s označením overenia.'], ['Cloud a Google prihlásenie', 'Ďalšia etapa', 'Samostatný Firebase Spark projekt, pravidlá pre jedného technika.'], ['Google Kalendár', 'Vyžaduje nastavenie', 'Pripojenie účtu a prenos zákazky na kliknutie.'], ['Revízne PDF a podpisy', 'Ďalšia etapa', 'Bez zásahu do existujúcej RS2.'], ['Plynové skupiny a paragrafy', 'Obsah na doplnenie', 'Pripravená kategória; bez automatického právneho výkladu.']].map(([title, state, text]) => `<div class="module-item"><span class="tiny ${state === 'Hotové' ? 'success-text' : 'muted'}">${(0, ui_js_1.e)(state)}</span><h3>${(0, ui_js_1.e)(title)}</h3><p>${(0, ui_js_1.e)(text)}</p></div>`).join('')}</div></section>
   <section class="panel settings-panel full"><h2>Bezplatná prevádzka</h2><p>Aplikácia je nasadená na Verceli. Zákazky a PDF zostávajú v prehliadači. Voliteľné Google prepojenie odosiela vybrané termíny do vášho kalendára; limity poskytovateľov sa môžu meniť.</p><div class="button-row"><a class="btn ghost" href="https://firebase.google.com/pricing" target="_blank" rel="noopener noreferrer">Overiť limity Firebase ${(0, ui_js_1.icon)('external')}</a>${(0, ui_js_1.button)(isDemo ? 'Opustiť ukážku' : 'Otvoriť ukážkové údaje', isDemo ? 'exit-demo' : 'enter-demo', 'sun')}</div><p class="tiny muted">Ukážkové dáta sú oddelené od vašich skutočných záznamov.</p></section></div>`;
