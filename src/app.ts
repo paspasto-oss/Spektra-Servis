@@ -1,3 +1,9 @@
+import {initCloud,loginCloud,logoutCloud,enableCloud,synchronize,cloudState,cloudUser} from './lib/cloud.js';
+import {cloudSettings,filesPage} from './modules/cloud-settings.js';
+import {queuedFiles,queueFile,fileType,type PendingFile} from './lib/file-queue.js';
+import {listManuals} from './lib/manual-store.js';
+import {loadRecovery,loadSyncMeta} from './lib/store.js';
+import {oneDriveState,oneDriveAccountId,resumeOneDrive,uploadAttachment,attachmentBlob} from './lib/onedrive.js';
 import { oneDriveClientId, prepareOneDrive, saveOneDriveClientId, connectOneDrive, disconnectOneDrive, uploadOneDriveBackup } from './lib/onedrive.js';
 import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/commerce.js';
 import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
@@ -17,13 +23,14 @@ import { settingsPage } from './modules/settings.js';
 import { editorContent, deviceOptions, type Editor, type EditorType } from './modules/editors.js';
 import { demoData } from './demo.js';
 
-const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Ponuky / RS2','jobs']];
+const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Ponuky / RS2','jobs'],['files','Súbory / OneDrive','upload']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
 let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
-let oneDriveBusy=false;
+let oneDriveBusy=false, syncBusy=false, fileBusy=false;
+let fileQueue:PendingFile[]=[],fileStatus='';
 let integrationBusy=false, costJobId='', costRevision=0, costLines:CostLine[]=[];
 let pendingEditor: { type: EditorType; extra: Partial<Editor> } | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
@@ -32,16 +39,16 @@ function fail(err: unknown): void { const text = err instanceof Error ? err.mess
 function nav(route: string): void { state.route = route; state.query = ''; state.filter = ''; if (route !== 'jobs') state.selectedCustomer = ''; location.hash = route; render(); window.scrollTo({ top: 0 }); }
 function render(): void {
   if (!ready) return;
-  const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), settings: () => settingsPage(data, state.workspace === 'demo') };
+  const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), files:()=>state.workspace==='demo'?'<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>':filesPage(data,fileQueue.filter(f=>f.owner===cloudUser()),fileStatus), settings: () => settingsPage(data, state.workspace === 'demo') };
   const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
   root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${icon('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${icon('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${e(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${e(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${e(cloudState.enabled?cloudState.status:(navigator.onLine?'Uložené v zariadení':'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>${e(cloudState.enabled?cloudState.status:"Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
 setManualRefresh(() => { if (state.route === 'knowledge') render(); });
 async function commit(next: Data, expected = data.revision): Promise<void> {
-  if (busy) throw new Error('Počkajte na dokončenie ukladania.'); busy = true;
+  if (busy || syncBusy) throw new Error('Počkajte na dokončenie ukladania / synchronizácie.'); busy = true;
   const submit = dialog.querySelector<HTMLButtonElement>('[type=submit]'); if (submit) submit.disabled = true;
-  try { const clean = await save(state.workspace, next, expected); data = clean; render(); } finally { busy = false; if (submit) submit.disabled = false; }
+  try { const clean = await save(state.workspace, next, expected); data = clean; render(); if(state.workspace==='real')setTimeout(()=>void syncTick(),700); } finally { busy = false; if (submit) submit.disabled = false; }
 }
 function canClose(): boolean { return !busy && (!dirty || confirm('Zahodiť neuložené zmeny vo formulári?')); }
 function closeEditor(): boolean { if (!canClose()) return false; dialog.close(); editor = null; pendingEditor = null; dirty = false; return true; }
@@ -87,7 +94,7 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   if (continuation && newCustomerId) openEditor(continuation.type, '', { ...continuation.extra, customerId: newCustomerId });
 }
 async function switchWorkspace(workspace: Workspace): Promise<void> {
-  if(oneDriveBusy)throw Error('Počkajte na dokončenie prenosu OneDrive.');
+  if(oneDriveBusy||syncBusy||fileBusy)throw Error('Počkajte na dokončenie prenosu.');
   if (dialog.open && !closeEditor()) return;
   const newData = await load(workspace);
   data = workspace === 'demo' && !newData.customers.length && !newData.jobs.length ? await save('demo', demoData(), newData.revision) : newData;
@@ -95,9 +102,12 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
 }
 async function act(action: string, el: HTMLElement): Promise<void> {
   const id = el.dataset.id || '';
+  if(syncBusy)throw Error('Práve prebieha synchronizácia, skúste o chvíľu.');
+  if(action==='job-files'){if(dirty)throw Error('Najskôr uložte zákazku.');if(!closeEditor())return;nav('files');const select=document.querySelector<HTMLSelectElement>('#attachment-form select');if(select)select.value=id;return;}
+  if(action.startsWith('sync-')||action.startsWith('files-')){await cloudAction(action,id);return;}
   if (action.startsWith('onedrive-')) {
     if(state.workspace!=='real')throw Error('OneDrive je dostupný iba vo vlastnom pracovnom priestore.');
-    if(dirty||busy)throw Error('Najskôr uložte rozpracovaný formulár.');
+    if(dirty||busy||fileBusy)throw Error('Najskôr uložte rozpracovaný formulár.');
     if(oneDriveBusy)throw Error('Počkajte na dokončenie požiadavky OneDrive.');oneDriveBusy=true;
     const buttons=Array.from(document.querySelectorAll<HTMLButtonElement>('[data-action^="onedrive-"]'));buttons.forEach(b=>b.disabled=true);
     try {
@@ -224,7 +234,7 @@ dialog.addEventListener('cancel', event => { event.preventDefault(); closeEditor
 dialog.addEventListener('input', () => { dirty = true; });
 dialog.addEventListener('change', () => { dirty = true; });
 document.addEventListener('invalid', event => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }, true);
-document.addEventListener('submit', event => { if ((event.target as HTMLElement).id === 'manual-form') { event.preventDefault(); if (state.workspace === 'real') void uploadManual(event.target as HTMLFormElement).catch(fail); return; } if ((event.target as HTMLElement).id === 'entity-form') { event.preventDefault(); void saveEditor(event.target as HTMLFormElement).catch(fail); } });
+document.addEventListener('submit', event => { if ((event.target as HTMLElement).id === 'manual-form') { event.preventDefault(); if (state.workspace === 'real') void uploadManual(event.target as HTMLFormElement).then(()=>enqueueManuals()).catch(fail); return; } if ((event.target as HTMLElement).id === 'entity-form') { event.preventDefault(); void saveEditor(event.target as HTMLFormElement).catch(fail); } });
 document.addEventListener('input', event => {
   const el = event.target as HTMLInputElement;
   if (el.id === 'page-search') { const pos = el.selectionStart; state.query = el.value; render(); const replacement = document.querySelector<HTMLInputElement>('#page-search'); replacement?.focus(); if (replacement && pos !== null) { try { replacement.setSelectionRange(pos, pos); } catch { /* input type support */ } } }
@@ -241,7 +251,7 @@ document.addEventListener('change', event => {
   if (el.id === 'job-device') { const address = dialog.querySelector<HTMLInputElement>('[name=address]'), device = data.devices.find(d => d.id === el.value); if (address && device?.location) address.value = device.location; }
 });
 window.addEventListener('hashchange', () => { const route = location.hash.slice(1); if (route && state.route !== route) { if (dialog.open && !closeEditor()) { history.replaceState(null, '', '#' + state.route); return; } state.route = routes.some(r => r[0] === route) || route === 'settings' ? route : 'home'; state.query = ''; state.filter = ''; state.selectedCustomer = ''; render(); } });
-window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy || fileBusy || syncBusy) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', render); window.addEventListener('offline', render);
 interface InstallEvent extends Event { prompt(): Promise<void> }
 let installPrompt: InstallEvent | undefined, waitingWorker: ServiceWorker | undefined;
@@ -257,9 +267,9 @@ async function setupPwa(): Promise<void> {
   } catch { message('Offline inštalácia nie je dostupná; miestne údaje zostávajú zachované.', true); }
 }
 async function init(): Promise<void> {
-  if(oneDriveClientId())void prepareOneDrive().catch(()=>{});
+  if(oneDriveClientId())void resumeOneDrive().then(()=>{if(ready&&!document.querySelector('input:focus,select:focus,textarea:focus'))render();}).catch(()=>{});
   if (googleClientId()) void prepareGoogle().catch(() => {});
-  try { data = await load('real'); ready = true; const route = location.hash.slice(1); if (routes.some(r => r[0] === route) || route === 'settings') state.route = route; render(); await setupPwa(); }
+  try { data = await load('real'); ready = true; const route = location.hash.slice(1); if (routes.some(r => r[0] === route) || route === 'settings') state.route = route; render(); void initCloud().then(()=>{if(!document.querySelector('input:focus,select:focus,textarea:focus'))render();void syncTick();}).catch(()=>{});void queuedFiles().then(q=>{fileQueue=q;});setInterval(()=>void syncTick(),15000);setInterval(()=>void fileTick(),15000); await setupPwa(); }
   catch (err) { root.innerHTML = `<main class="fatal"><h1>Údaje sa nepodarilo otvoriť</h1><p>${e(err instanceof Error ? err.message : err)}</p><p>Nič sa neprepísalo. Nevymazávajte údaje prehliadača. Skúste aplikáciu otvoriť cez lokálny server alebo podporovaný prehliadač.</p></main>`; }
 }
 void init();
@@ -278,3 +288,70 @@ document.addEventListener('submit',event=>{
  const form=event.target as HTMLFormElement;if(form.id!=='cost-form')return;event.preventDefault();
  void (async()=>{const lines=readCostRows(form,costLines);if(!lines.length)throw Error('Pridajte aspoň jednu položku.');if(lines.some(l=>!l.name.trim()))throw Error('Vyplňte názov každej položky.');const next=structuredClone(data),job=next.jobs.find(j=>j.id===costJobId);if(!job)throw Error('Zákazka sa nenašla.');job.costing=lines;job.amount=totals(lines).gross;job.updatedAt=new Date().toISOString();job.version++;await commit(next,costRevision);dirty=false;closeEditor();message('Kalkulácia aj konečná cena sú uložené.');})().catch(fail);
 });
+
+function showSyncStatus():void{document.querySelectorAll('#sync-status,.save-state,.storage-banner > span').forEach(el=>el.textContent=cloudState.status);}
+async function syncTick(choice?:'local'|'remote'):Promise<void>{
+ if(!ready||state.workspace!=='real'||busy||syncBusy||oneDriveBusy||fileBusy||dialog.open||dirty||!cloudState.enabled)return;
+ // Avoid replacing partially entered settings / upload fields during polling.
+ const run=async()=>{syncBusy=true;try{const result=await synchronize(choice);if(result){data=result;if(!document.querySelector('input:focus,select:focus,textarea:focus'))render();}showSyncStatus();if(cloudState.conflicts.length&&state.route==='settings'&&!document.querySelector('input:focus'))render();}catch(err){cloudState.status=err instanceof Error?err.message:'Synchronizácia sa zopakuje';showSyncStatus();}finally{syncBusy=false;}};
+ if(navigator.locks)await navigator.locks.request('spektra-sync',{ifAvailable:true},async lock=>{if(lock)await run();});else await run();
+ void fileTick();
+}
+async function cloudAction(action:string,id:string):Promise<void>{
+ if(state.workspace!=='real'||busy||dirty||dialog.open||oneDriveBusy||fileBusy)throw Error('Najskôr dokončite otvorený formulár alebo prenos.');
+ if(action==='sync-enable'){
+  if(!confirm('Prepojiť miestne údaje s účtom '+cloudState.email+'? Existujúce údaje oboch zariadení sa zlúčia. Pred prepojením sa uloží ochranná miestna kópia.'))return;
+  data=await enableCloud();render();await syncTick();return;
+ }
+ if(action==='sync-logout'){await logoutCloud();render();return;}
+ if(action==='sync-now'){await syncTick();render();return;}
+ if(action==='sync-local'||action==='sync-remote'){
+  if(!confirm('Pri konfliktných poliach použiť '+(action==='sync-local'?'hodnoty tohto zariadenia':'hodnoty z cloudu')+'? Ostatné zmeny sa zlúčia.'))return;
+  await syncTick(action==='sync-local'?'local':'remote');render();return;
+ }
+ if(action==='sync-recovery'){const old=await loadRecovery();if(!old)throw Error('Ochranná kópia zatiaľ neexistuje.');download('Spektra-pred-synchronizaciou.json',JSON.stringify(old));return;}
+ if(action==='files-manuals'){await enqueueManuals(true);return;}
+ if(action==='files-retry'){await fileTick();render();return;}
+ if(action==='files-cancel'){const f=fileQueue.find(f=>f.id===id&&f.owner===cloudUser());if(f&&confirm('Zrušiť čakajúci prenos '+f.name+'?')){await queueFile(id);fileQueue=await queuedFiles();render();}return;}
+ if(action==='files-download'){
+  const f=data.attachments?.find(f=>f.id===id);if(!f)return;
+  fileBusy=true;try{const blob=await attachmentBlob(f.itemId,f.driveAccount),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}finally{fileBusy=false;}return;
+ }
+}
+async function enqueue(files:{file:Blob;name:string;manualId?:string}[],jobId:string):Promise<void>{
+ if(state.workspace!=='real'||!cloudUser()||!cloudState.enabled)throw Error('Najskôr zapnite synchronizáciu v Nastaveniach.');
+ const driveAccount=oneDriveAccountId();if(!driveAccount||!oneDriveState().connected)throw Error('Najskôr pripojte OneDrive v Nastaveniach.');
+ const owner=cloudUser();
+ for(const input of files){
+  const id=input.manualId?'manual-'+input.manualId:crypto.randomUUID();
+  if(data.attachments?.some(f=>f.id===id)||(await queuedFiles()).some(f=>f.id===id))continue;
+  const mime=await fileType(input.file,input.name);
+  await queueFile({id,owner,driveAccount,name:input.name.slice(0,240),mime,jobId,manualId:input.manualId||'',file:input.file,createdAt:new Date().toISOString()});
+ }
+ fileQueue=await queuedFiles();fileStatus='Súbory sú uložené v zariadení a čakajú na prenos.';render();void fileTick();
+}
+async function enqueueManuals(explicit=false):Promise<void>{
+ if(!cloudState.enabled||!oneDriveState().connected){if(explicit)throw Error('Pripojte synchronizáciu aj OneDrive.');return;}
+ const manuals=await listManuals();await enqueue(manuals.map(m=>({file:m.file,name:m.filename,manualId:m.id})), '');
+}
+async function fileTick():Promise<void>{
+ if(state.workspace!=='real'||fileBusy||busy||syncBusy||oneDriveBusy||dialog.open||!navigator.onLine||!oneDriveState().connected||!cloudState.enabled||!cloudUser())return;
+ const run=async()=>{fileBusy=true;try{
+  fileQueue=await queuedFiles();const f=fileQueue.find(x=>x.owner===cloudUser());if(!f)return;
+  const meta=await loadSyncMeta();if(meta?.owner!==f.owner)throw Error('Účet synchronizácie nezodpovedá prílohe.');
+  if(f.driveAccount!==oneDriveAccountId())throw Error('Čakajúci súbor patrí inému OneDrive účtu. Pripojte pôvodný účet.');
+  const itemId=await uploadAttachment(f.file,f.id,f.mime,f.driveAccount);
+  if(dialog.open||dirty)return; // Keep the durable queue; retry the same filename after editing finishes.
+  const current=await load('real');if(f.jobId&&!current.jobs.some(j=>j.id===f.jobId))throw Error('Zákazka prílohy chýba. Prenos zostal v zozname.');
+  if(!current.attachments?.some(a=>a.id===f.id)){current.attachments=[...(current.attachments||[]),{id:f.id,name:f.name,mime:f.mime,bytes:f.file.size,jobId:f.jobId,manualId:f.manualId,itemId,driveAccount:f.driveAccount,createdAt:f.createdAt,updatedAt:new Date().toISOString()}];data=await save('real',current,current.revision);}
+  await queueFile(f.id);fileQueue=await queuedFiles();fileStatus='Uložené v OneDrive: '+f.name;
+ }catch(err){fileStatus=err instanceof Error?err.message:'Prenos sa zopakuje';}finally{fileBusy=false;if(state.route==='files'&&!document.querySelector('input:focus,select:focus'))render();}};
+ if(navigator.locks)await navigator.locks.request('spektra-file-uploads',{ifAvailable:true},async lock=>{if(lock)await run();});else await run();
+}
+document.addEventListener('submit',event=>{
+ const form=event.target as HTMLFormElement;
+ if(form.id==='sync-login-form'){event.preventDefault();if(syncBusy||fileBusy||busy){message('Počkajte na dokončenie prenosu.',true);return;}const fields=new FormData(form),email=String(fields.get('email')||''),password=String(fields.get('password')||'');form.reset();void loginCloud(email,password).then(()=>{render();void syncTick();}).catch(fail);}
+ if(form.id==='attachment-form'){event.preventDefault();const fields=new FormData(form),files=fields.getAll('files').filter((x):x is File=>x instanceof File&&!!x.name);void enqueue(files.map(f=>({file:f,name:f.name})),String(fields.get('jobId')||'')).catch(fail);}
+});
+window.addEventListener('online',()=>{void syncTick();void resumeOneDrive().then(()=>fileTick()).catch(()=>{});});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void syncTick();});

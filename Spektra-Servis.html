@@ -34,14 +34,20 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const cloud_js_1 = require("./lib/cloud.js");
+const cloud_settings_js_1 = require("./modules/cloud-settings.js");
+const file_queue_js_1 = require("./lib/file-queue.js");
+const manual_store_js_1 = require("./lib/manual-store.js");
+const store_js_1 = require("./lib/store.js");
 const onedrive_js_1 = require("./lib/onedrive.js");
+const onedrive_js_2 = require("./lib/onedrive.js");
 const commerce_js_1 = require("./lib/commerce.js");
 const commerce_js_2 = require("./modules/commerce.js");
 const google_calendar_js_1 = require("./lib/google-calendar.js");
 const manuals_js_1 = require("./modules/manuals.js");
 const domain_js_1 = require("./domain.js");
 const calendar_js_1 = require("./lib/calendar.js");
-const store_js_1 = require("./lib/store.js");
+const store_js_2 = require("./lib/store.js");
 const backup_js_1 = require("./lib/backup.js");
 const ui_js_1 = require("./ui.js");
 const dashboard_js_1 = require("./modules/dashboard.js");
@@ -52,13 +58,14 @@ const knowledge_js_1 = require("./modules/knowledge.js");
 const settings_js_1 = require("./modules/settings.js");
 const editors_js_1 = require("./modules/editors.js");
 const demo_js_1 = require("./demo.js");
-const routes = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce', 'Ponuky / RS2', 'jobs']];
+const routes = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce', 'Ponuky / RS2', 'jobs'], ['files', 'Súbory / OneDrive', 'upload']];
 let data = (0, domain_js_1.emptyData)(), ready = false, busy = false, editor = null, dirty = false;
 let state = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: (0, calendar_js_1.today)(), month: (0, calendar_js_1.today)().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector('#app');
 const dialog = document.querySelector('#editor');
 const toastElement = document.querySelector('#toast');
-let oneDriveBusy = false;
+let oneDriveBusy = false, syncBusy = false, fileBusy = false;
+let fileQueue = [], fileStatus = '';
 let integrationBusy = false, costJobId = '', costRevision = 0, costLines = [];
 let pendingEditor = null;
 let toastTimer;
@@ -76,24 +83,26 @@ function nav(route) { state.route = route; state.query = ''; state.filter = ''; 
 function render() {
     if (!ready)
         return;
-    const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
+    const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), files: () => state.workspace === 'demo' ? '<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>' : (0, cloud_settings_js_1.filesPage)(data, fileQueue.filter(f => f.owner === (0, cloud_js_1.cloudUser)()), fileStatus), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
     const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${(0, ui_js_1.icon)(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
     root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${(0, ui_js_1.icon)('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${(0, ui_js_1.icon)('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${(0, ui_js_1.e)(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${(0, ui_js_1.e)(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
 (0, manuals_js_1.setManualRefresh)(() => { if (state.route === 'knowledge')
     render(); });
 async function commit(next, expected = data.revision) {
-    if (busy)
-        throw new Error('Počkajte na dokončenie ukladania.');
+    if (busy || syncBusy)
+        throw new Error('Počkajte na dokončenie ukladania / synchronizácie.');
     busy = true;
     const submit = dialog.querySelector('[type=submit]');
     if (submit)
         submit.disabled = true;
     try {
-        const clean = await (0, store_js_1.save)(state.workspace, next, expected);
+        const clean = await (0, store_js_2.save)(state.workspace, next, expected);
         data = clean;
         render();
+        if (state.workspace === 'real')
+            setTimeout(() => void syncTick(), 700);
     }
     finally {
         busy = false;
@@ -162,21 +171,38 @@ async function saveEditor(form) {
         openEditor(continuation.type, '', { ...continuation.extra, customerId: newCustomerId });
 }
 async function switchWorkspace(workspace) {
-    if (oneDriveBusy)
-        throw Error('Počkajte na dokončenie prenosu OneDrive.');
+    if (oneDriveBusy || syncBusy || fileBusy)
+        throw Error('Počkajte na dokončenie prenosu.');
     if (dialog.open && !closeEditor())
         return;
-    const newData = await (0, store_js_1.load)(workspace);
-    data = workspace === 'demo' && !newData.customers.length && !newData.jobs.length ? await (0, store_js_1.save)('demo', (0, demo_js_1.demoData)(), newData.revision) : newData;
+    const newData = await (0, store_js_2.load)(workspace);
+    data = workspace === 'demo' && !newData.customers.length && !newData.jobs.length ? await (0, store_js_2.save)('demo', (0, demo_js_1.demoData)(), newData.revision) : newData;
     state = { ...state, workspace, selectedCustomer: '', query: '', filter: '' };
     nav('home');
 }
 async function act(action, el) {
     const id = el.dataset.id || '';
+    if (syncBusy)
+        throw Error('Práve prebieha synchronizácia, skúste o chvíľu.');
+    if (action === 'job-files') {
+        if (dirty)
+            throw Error('Najskôr uložte zákazku.');
+        if (!closeEditor())
+            return;
+        nav('files');
+        const select = document.querySelector('#attachment-form select');
+        if (select)
+            select.value = id;
+        return;
+    }
+    if (action.startsWith('sync-') || action.startsWith('files-')) {
+        await cloudAction(action, id);
+        return;
+    }
     if (action.startsWith('onedrive-')) {
         if (state.workspace !== 'real')
             throw Error('OneDrive je dostupný iba vo vlastnom pracovnom priestore.');
-        if (dirty || busy)
+        if (dirty || busy || fileBusy)
             throw Error('Najskôr uložte rozpracovaný formulár.');
         if (oneDriveBusy)
             throw Error('Počkajte na dokončenie požiadavky OneDrive.');
@@ -185,15 +211,15 @@ async function act(action, el) {
         buttons.forEach(b => b.disabled = true);
         try {
             if (action === 'onedrive-config-save') {
-                await (0, onedrive_js_1.saveOneDriveClientId)(document.querySelector('#onedrive-client-id')?.value || '');
+                await (0, onedrive_js_2.saveOneDriveClientId)(document.querySelector('#onedrive-client-id')?.value || '');
                 message('Nastavenie uložené. Kliknite Pripojiť OneDrive.');
             }
             if (action === 'onedrive-connect') {
-                await (0, onedrive_js_1.connectOneDrive)();
+                await (0, onedrive_js_2.connectOneDrive)();
                 message('OneDrive bol pripojený. Teraz môžete uložiť zálohu.');
             }
             if (action === 'onedrive-disconnect') {
-                await (0, onedrive_js_1.disconnectOneDrive)();
+                await (0, onedrive_js_2.disconnectOneDrive)();
                 message('Relácia odpojená. Zálohy zostali v OneDrive.');
             }
             if (action === 'onedrive-backup') {
@@ -202,7 +228,7 @@ async function act(action, el) {
                     input.value = '';
                 const next = structuredClone(data), revision = data.revision;
                 next.lastBackup = new Date().toISOString();
-                const name = await (0, onedrive_js_1.uploadOneDriveBackup)(next, password);
+                const name = await (0, onedrive_js_2.uploadOneDriveBackup)(next, password);
                 if (state.workspace === 'real' && data.revision === revision)
                     await commit(next, revision);
                 message('Šifrovaná záloha uložená: ' + name);
@@ -483,7 +509,7 @@ document.addEventListener('invalid', event => { const details = event.target.clo
 document.addEventListener('submit', event => { if (event.target.id === 'manual-form') {
     event.preventDefault();
     if (state.workspace === 'real')
-        void (0, manuals_js_1.uploadManual)(event.target).catch(fail);
+        void (0, manuals_js_1.uploadManual)(event.target).then(() => enqueueManuals()).catch(fail);
     return;
 } if (event.target.id === 'entity-form') {
     event.preventDefault();
@@ -547,7 +573,7 @@ window.addEventListener('hashchange', () => { const route = location.hash.slice(
     state.selectedCustomer = '';
     render();
 } });
-window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy) {
+window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy || fileBusy || syncBusy) {
     event.preventDefault();
     event.returnValue = '';
 } });
@@ -576,17 +602,23 @@ async function setupPwa() {
     }
 }
 async function init() {
-    if ((0, onedrive_js_1.oneDriveClientId)())
-        void (0, onedrive_js_1.prepareOneDrive)().catch(() => { });
+    if ((0, onedrive_js_2.oneDriveClientId)())
+        void (0, onedrive_js_1.resumeOneDrive)().then(() => { if (ready && !document.querySelector('input:focus,select:focus,textarea:focus'))
+            render(); }).catch(() => { });
     if ((0, google_calendar_js_1.googleClientId)())
         void (0, google_calendar_js_1.prepareGoogle)().catch(() => { });
     try {
-        data = await (0, store_js_1.load)('real');
+        data = await (0, store_js_2.load)('real');
         ready = true;
         const route = location.hash.slice(1);
         if (routes.some(r => r[0] === route) || route === 'settings')
             state.route = route;
         render();
+        void (0, cloud_js_1.initCloud)().then(() => { if (!document.querySelector('input:focus,select:focus,textarea:focus'))
+            render(); void syncTick(); }).catch(() => { });
+        void (0, file_queue_js_1.queuedFiles)().then(q => { fileQueue = q; });
+        setInterval(() => void syncTick(), 15000);
+        setInterval(() => void fileTick(), 15000);
         await setupPwa();
     }
     catch (err) {
@@ -631,6 +663,200 @@ document.addEventListener('submit', event => {
         throw Error('Vyplňte názov každej položky.'); const next = structuredClone(data), job = next.jobs.find(j => j.id === costJobId); if (!job)
         throw Error('Zákazka sa nenašla.'); job.costing = lines; job.amount = (0, commerce_js_1.totals)(lines).gross; job.updatedAt = new Date().toISOString(); job.version++; await commit(next, costRevision); dirty = false; closeEditor(); message('Kalkulácia aj konečná cena sú uložené.'); })().catch(fail);
 });
+function showSyncStatus() { document.querySelectorAll('#sync-status,.save-state,.storage-banner > span').forEach(el => el.textContent = cloud_js_1.cloudState.status); }
+async function syncTick(choice) {
+    if (!ready || state.workspace !== 'real' || busy || syncBusy || oneDriveBusy || fileBusy || dialog.open || dirty || !cloud_js_1.cloudState.enabled)
+        return;
+    // Avoid replacing partially entered settings / upload fields during polling.
+    const run = async () => { syncBusy = true; try {
+        const result = await (0, cloud_js_1.synchronize)(choice);
+        if (result) {
+            data = result;
+            if (!document.querySelector('input:focus,select:focus,textarea:focus'))
+                render();
+        }
+        showSyncStatus();
+        if (cloud_js_1.cloudState.conflicts.length && state.route === 'settings' && !document.querySelector('input:focus'))
+            render();
+    }
+    catch (err) {
+        cloud_js_1.cloudState.status = err instanceof Error ? err.message : 'Synchronizácia sa zopakuje';
+        showSyncStatus();
+    }
+    finally {
+        syncBusy = false;
+    } };
+    if (navigator.locks)
+        await navigator.locks.request('spektra-sync', { ifAvailable: true }, async (lock) => { if (lock)
+            await run(); });
+    else
+        await run();
+    void fileTick();
+}
+async function cloudAction(action, id) {
+    if (state.workspace !== 'real' || busy || dirty || dialog.open || oneDriveBusy || fileBusy)
+        throw Error('Najskôr dokončite otvorený formulár alebo prenos.');
+    if (action === 'sync-enable') {
+        if (!confirm('Prepojiť miestne údaje s účtom ' + cloud_js_1.cloudState.email + '? Existujúce údaje oboch zariadení sa zlúčia. Pred prepojením sa uloží ochranná miestna kópia.'))
+            return;
+        data = await (0, cloud_js_1.enableCloud)();
+        render();
+        await syncTick();
+        return;
+    }
+    if (action === 'sync-logout') {
+        await (0, cloud_js_1.logoutCloud)();
+        render();
+        return;
+    }
+    if (action === 'sync-now') {
+        await syncTick();
+        render();
+        return;
+    }
+    if (action === 'sync-local' || action === 'sync-remote') {
+        if (!confirm('Pri konfliktných poliach použiť ' + (action === 'sync-local' ? 'hodnoty tohto zariadenia' : 'hodnoty z cloudu') + '? Ostatné zmeny sa zlúčia.'))
+            return;
+        await syncTick(action === 'sync-local' ? 'local' : 'remote');
+        render();
+        return;
+    }
+    if (action === 'sync-recovery') {
+        const old = await (0, store_js_1.loadRecovery)();
+        if (!old)
+            throw Error('Ochranná kópia zatiaľ neexistuje.');
+        (0, backup_js_1.download)('Spektra-pred-synchronizaciou.json', JSON.stringify(old));
+        return;
+    }
+    if (action === 'files-manuals') {
+        await enqueueManuals(true);
+        return;
+    }
+    if (action === 'files-retry') {
+        await fileTick();
+        render();
+        return;
+    }
+    if (action === 'files-cancel') {
+        const f = fileQueue.find(f => f.id === id && f.owner === (0, cloud_js_1.cloudUser)());
+        if (f && confirm('Zrušiť čakajúci prenos ' + f.name + '?')) {
+            await (0, file_queue_js_1.queueFile)(id);
+            fileQueue = await (0, file_queue_js_1.queuedFiles)();
+            render();
+        }
+        return;
+    }
+    if (action === 'files-download') {
+        const f = data.attachments?.find(f => f.id === id);
+        if (!f)
+            return;
+        fileBusy = true;
+        try {
+            const blob = await (0, onedrive_js_1.attachmentBlob)(f.itemId, f.driveAccount), url = URL.createObjectURL(blob), a = document.createElement('a');
+            a.href = url;
+            a.download = f.name;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        }
+        finally {
+            fileBusy = false;
+        }
+        return;
+    }
+}
+async function enqueue(files, jobId) {
+    if (state.workspace !== 'real' || !(0, cloud_js_1.cloudUser)() || !cloud_js_1.cloudState.enabled)
+        throw Error('Najskôr zapnite synchronizáciu v Nastaveniach.');
+    const driveAccount = (0, onedrive_js_1.oneDriveAccountId)();
+    if (!driveAccount || !(0, onedrive_js_1.oneDriveState)().connected)
+        throw Error('Najskôr pripojte OneDrive v Nastaveniach.');
+    const owner = (0, cloud_js_1.cloudUser)();
+    for (const input of files) {
+        const id = input.manualId ? 'manual-' + input.manualId : crypto.randomUUID();
+        if (data.attachments?.some(f => f.id === id) || (await (0, file_queue_js_1.queuedFiles)()).some(f => f.id === id))
+            continue;
+        const mime = await (0, file_queue_js_1.fileType)(input.file, input.name);
+        await (0, file_queue_js_1.queueFile)({ id, owner, driveAccount, name: input.name.slice(0, 240), mime, jobId, manualId: input.manualId || '', file: input.file, createdAt: new Date().toISOString() });
+    }
+    fileQueue = await (0, file_queue_js_1.queuedFiles)();
+    fileStatus = 'Súbory sú uložené v zariadení a čakajú na prenos.';
+    render();
+    void fileTick();
+}
+async function enqueueManuals(explicit = false) {
+    if (!cloud_js_1.cloudState.enabled || !(0, onedrive_js_1.oneDriveState)().connected) {
+        if (explicit)
+            throw Error('Pripojte synchronizáciu aj OneDrive.');
+        return;
+    }
+    const manuals = await (0, manual_store_js_1.listManuals)();
+    await enqueue(manuals.map(m => ({ file: m.file, name: m.filename, manualId: m.id })), '');
+}
+async function fileTick() {
+    if (state.workspace !== 'real' || fileBusy || busy || syncBusy || oneDriveBusy || dialog.open || !navigator.onLine || !(0, onedrive_js_1.oneDriveState)().connected || !cloud_js_1.cloudState.enabled || !(0, cloud_js_1.cloudUser)())
+        return;
+    const run = async () => {
+        fileBusy = true;
+        try {
+            fileQueue = await (0, file_queue_js_1.queuedFiles)();
+            const f = fileQueue.find(x => x.owner === (0, cloud_js_1.cloudUser)());
+            if (!f)
+                return;
+            const meta = await (0, store_js_1.loadSyncMeta)();
+            if (meta?.owner !== f.owner)
+                throw Error('Účet synchronizácie nezodpovedá prílohe.');
+            if (f.driveAccount !== (0, onedrive_js_1.oneDriveAccountId)())
+                throw Error('Čakajúci súbor patrí inému OneDrive účtu. Pripojte pôvodný účet.');
+            const itemId = await (0, onedrive_js_1.uploadAttachment)(f.file, f.id, f.mime, f.driveAccount);
+            if (dialog.open || dirty)
+                return; // Keep the durable queue; retry the same filename after editing finishes.
+            const current = await (0, store_js_2.load)('real');
+            if (f.jobId && !current.jobs.some(j => j.id === f.jobId))
+                throw Error('Zákazka prílohy chýba. Prenos zostal v zozname.');
+            if (!current.attachments?.some(a => a.id === f.id)) {
+                current.attachments = [...(current.attachments || []), { id: f.id, name: f.name, mime: f.mime, bytes: f.file.size, jobId: f.jobId, manualId: f.manualId, itemId, driveAccount: f.driveAccount, createdAt: f.createdAt, updatedAt: new Date().toISOString() }];
+                data = await (0, store_js_2.save)('real', current, current.revision);
+            }
+            await (0, file_queue_js_1.queueFile)(f.id);
+            fileQueue = await (0, file_queue_js_1.queuedFiles)();
+            fileStatus = 'Uložené v OneDrive: ' + f.name;
+        }
+        catch (err) {
+            fileStatus = err instanceof Error ? err.message : 'Prenos sa zopakuje';
+        }
+        finally {
+            fileBusy = false;
+            if (state.route === 'files' && !document.querySelector('input:focus,select:focus'))
+                render();
+        }
+    };
+    if (navigator.locks)
+        await navigator.locks.request('spektra-file-uploads', { ifAvailable: true }, async (lock) => { if (lock)
+            await run(); });
+    else
+        await run();
+}
+document.addEventListener('submit', event => {
+    const form = event.target;
+    if (form.id === 'sync-login-form') {
+        event.preventDefault();
+        if (syncBusy || fileBusy || busy) {
+            message('Počkajte na dokončenie prenosu.', true);
+            return;
+        }
+        const fields = new FormData(form), email = String(fields.get('email') || ''), password = String(fields.get('password') || '');
+        form.reset();
+        void (0, cloud_js_1.loginCloud)(email, password).then(() => { render(); void syncTick(); }).catch(fail);
+    }
+    if (form.id === 'attachment-form') {
+        event.preventDefault();
+        const fields = new FormData(form), files = fields.getAll('files').filter((x) => x instanceof File && !!x.name);
+        void enqueue(files.map(f => ({ file: f, name: f.name })), String(fields.get('jobId') || '')).catch(fail);
+    }
+});
+window.addEventListener('online', () => { void syncTick(); void (0, onedrive_js_1.resumeOneDrive)().then(() => fileTick()).catch(() => { }); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden)
+    void syncTick(); });
 
 },
 "demo.js":function(require,module,exports){
@@ -723,7 +949,12 @@ function validateData(input) {
     };
     if (!Number.isInteger(data.revision))
         return fail('verzia dát');
-    const all = [...data.customers, ...data.devices, ...data.jobs, ...data.tips];
+    if (root.attachments !== undefined)
+        data.attachments = arr(root.attachments, 'prílohy', o => ({ ...base(o), name: str(o.name, 'názov súboru', 240), mime: choice(o.mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'], 'typ súboru'), bytes: num(o.bytes, 'veľkosť súboru', 1, 100 * 1024 * 1024), jobId: str(o.jobId, 'zákazka', 80), itemId: str(o.itemId, 'OneDrive súbor', 200), driveAccount: str(o.driveAccount, 'OneDrive účet', 200), manualId: str(o.manualId, 'návod', 80) }));
+    for (const a of data.attachments || [])
+        if (a.jobId && !data.jobs.some(j => j.id === a.jobId))
+            return fail('príloha bez zákazky');
+    const all = [...(data.attachments || []), ...data.customers, ...data.devices, ...data.jobs, ...data.tips];
     if (new Set(all.map(x => x.id)).size !== all.length)
         return fail('opakované identifikátory');
     const customers = new Set(data.customers.map(x => x.id));
@@ -902,6 +1133,115 @@ function makeIcs(jobs, customers, now = new Date().toISOString()) {
 }
 
 },
+"lib/cloud.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.cloudState = void 0;
+exports.cloudUser = cloudUser;
+exports.initCloud = initCloud;
+exports.loginCloud = loginCloud;
+exports.logoutCloud = logoutCloud;
+exports.enableCloud = enableCloud;
+exports.synchronize = synchronize;
+const domain_js_1 = require("../domain.js");
+const sync_merge_js_1 = require("./sync-merge.js");
+const store_js_1 = require("./store.js");
+let client, pending;
+let user = null;
+exports.cloudState = { email: '', enabled: false, status: 'Synchronizácia nie je pripojená', conflicts: [] };
+function cloudUser() { return user?.id || ''; }
+async function sdk() {
+    if (client)
+        return client;
+    if (pending)
+        return pending;
+    pending = (async () => {
+        if (!window.supabase)
+            await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = './vendor/supabase.js'; const t = setTimeout(() => reject(Error('Prihlásenie sa nenačítalo. Skúste znova online.')), 20000); s.onload = () => { clearTimeout(t); resolve(); }; s.onerror = () => { clearTimeout(t); reject(Error('Prihlásenie sa nenačítalo.')); }; document.head.append(s); });
+        if (!window.supabase)
+            throw Error('Knižnica prihlásenia nie je dostupná.');
+        client = window.supabase.createClient('https://rrakzoicawqbcpnzavet.supabase.co', 'sb_publishable_ZZOAMeOcSHS6IGghKIu1lA_xss5sJzK', { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'spektra-servis-auth' }, global: { fetch: (url, init) => fetch(url, { ...init, signal: init?.signal || AbortSignal.timeout(20000) }) } });
+        client.auth.onAuthStateChange((_event, session) => { user = session?.user || null; exports.cloudState.email = user?.email || ''; if (!user)
+            exports.cloudState.enabled = false; });
+        return client;
+    })();
+    try {
+        return await pending;
+    }
+    finally {
+        pending = undefined;
+    }
+}
+async function initCloud() { const c = await sdk(); const { data } = await c.auth.getSession(); user = data.session?.user || null; exports.cloudState.email = user?.email || ''; const m = await (0, store_js_1.loadSyncMeta)(); exports.cloudState.enabled = !!user && m?.owner === user.id && m.enabled; exports.cloudState.status = exports.cloudState.enabled ? 'Čaká na synchronizáciu' : user ? 'Zapnite synchronizáciu tohto zariadenia' : 'Prihláste sa účtom Cenových ponúk'; }
+async function loginCloud(email, password) { const c = await sdk(); const { data, error } = await c.auth.signInWithPassword({ email, password }); if (error || !data.user)
+    throw Error('Prihlásenie sa nepodarilo. Použite e-mail a heslo z Cenových ponúk.'); user = data.user; exports.cloudState.email = user.email || ''; const m = await (0, store_js_1.loadSyncMeta)(); if (m && m.owner !== user.id) {
+    await c.auth.signOut({ scope: 'local' });
+    user = null;
+    throw Error('Toto zariadenie je prepojené s iným účtom. Prihláste sa pôvodným účtom; miestne údaje neboli prenesené.');
+} exports.cloudState.enabled = !!m?.enabled; exports.cloudState.status = exports.cloudState.enabled ? 'Čaká na synchronizáciu' : 'Prihlásené; zapnite synchronizáciu zariadenia'; }
+async function logoutCloud() { await (await sdk()).auth.signOut({ scope: 'local' }); user = null; exports.cloudState.email = ''; exports.cloudState.enabled = false; exports.cloudState.status = 'Odhlásené · údaje zostávajú v zariadení'; }
+async function enableCloud() { if (!user)
+    throw Error('Najskôr sa prihláste.'); const local = await (0, store_js_1.load)('real'), m = await (0, store_js_1.loadSyncMeta)(); if (m && m.owner !== user.id)
+    throw Error('Zariadenie patrí inému účtu.'); if (!m)
+    await (0, store_js_1.recoverySnapshot)(local); const result = await (0, store_js_1.save)('real', local, local.revision, { owner: user.id, base: m?.base || (0, sync_merge_js_1.initialBase)(), remoteRevision: m?.remoteRevision || 0, enabled: true }); exports.cloudState.enabled = true; return result; }
+/** Persist remote baseline and local result in ONE transaction: crash/retry cannot lose pending edits. */
+async function synchronize(choice) {
+    if (!exports.cloudState.enabled || !user)
+        return;
+    if (!navigator.onLine) {
+        exports.cloudState.status = 'Offline · zmeny čakajú v zariadení';
+        return;
+    }
+    const owner = user.id, c = await sdk();
+    const meta = await (0, store_js_1.loadSyncMeta)();
+    if (!meta || meta.owner !== owner || !meta.enabled)
+        return;
+    const local = await (0, store_js_1.load)('real');
+    exports.cloudState.status = 'Synchronizujem…';
+    let result = await c.from('servis_sync').select('revision').eq('user_id', owner).maybeSingle();
+    if (!result.error && result.data) {
+        if (Number(result.data.revision) === meta.remoteRevision)
+            result = { ...result, data: { ...result.data, payload: meta.base } };
+        else
+            result = await c.from('servis_sync').select('revision,payload').eq('user_id', owner).maybeSingle();
+    }
+    if (result.error)
+        throw Error('Cloud nie je dostupný. Miestne zmeny zostali uložené.');
+    if (user?.id !== owner)
+        throw Error('Účet sa zmenil počas synchronizácie.');
+    const remote = result.data ? (0, domain_js_1.validateData)(result.data.payload) : (0, sync_merge_js_1.initialBase)(), revision = Number(result.data?.revision || 0);
+    const merged = (0, sync_merge_js_1.mergeData)(meta.base, local, remote, choice);
+    exports.cloudState.conflicts = merged.conflicts;
+    if (merged.conflicts.length && !choice) {
+        exports.cloudState.status = 'Konflikt úprav · vyberte verziu v Nastaveniach';
+        return;
+    }
+    if (choice)
+        await (0, store_js_1.recoverySnapshot)(local);
+    let remoteRevision = revision;
+    if (!result.data || !(0, sync_merge_js_1.equal)((0, sync_merge_js_1.syncPayload)(merged.data), (0, sync_merge_js_1.syncPayload)(remote))) {
+        const sent = await c.rpc('servis_sync_write', { expected_revision: revision, new_payload: (0, sync_merge_js_1.syncPayload)(merged.data) });
+        if (sent.error)
+            throw Error('Zmeny sa nepodarilo odoslať. Zostali v zariadení a prenos sa zopakuje.');
+        if (!sent.data) {
+            exports.cloudState.status = 'Druhé zariadenie práve ukladá; prenos zopakujem';
+            return;
+        }
+        remoteRevision = Number(sent.data);
+    }
+    if (user?.id !== owner)
+        throw Error('Účet sa zmenil počas synchronizácie.');
+    const m = { ...meta, base: (0, sync_merge_js_1.syncPayload)(merged.data), remoteRevision };
+    // Another tab may save while the network is in flight. CAS rejects and retries without discarding its changes.
+    let saved;
+    if (remoteRevision !== meta.remoteRevision || !(0, sync_merge_js_1.equal)((0, sync_merge_js_1.syncPayload)(local), (0, sync_merge_js_1.syncPayload)(merged.data)))
+        saved = await (0, store_js_1.save)('real', merged.data, local.revision, m);
+    exports.cloudState.conflicts = [];
+    exports.cloudState.status = 'Synchronizované · ' + new Date().toLocaleTimeString('sk-SK');
+    return saved;
+}
+
+},
 "lib/commerce.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -986,6 +1326,36 @@ function openIntegration(target, operation, payload) {
         }
         window.addEventListener('message', receive);
     });
+}
+
+},
+"lib/file-queue.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.queuedFiles = queuedFiles;
+exports.queueFile = queueFile;
+exports.fileType = fileType;
+function db() { return new Promise((resolve, reject) => { const r = indexedDB.open('spektra-file-queue-v1', 1); r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'id' }); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); }
+async function queuedFiles() { const d = await db(); return new Promise((resolve, reject) => { const t = d.transaction('files'), r = t.objectStore('files').getAll(); t.oncomplete = () => { d.close(); resolve(r.result); }; t.onerror = () => { d.close(); reject(t.error); }; }); }
+async function queueFile(file) { const d = await db(); return new Promise((resolve, reject) => { const t = d.transaction('files', 'readwrite'), s = t.objectStore('files'); if (typeof file === 'string')
+    s.delete(file);
+else
+    s.put(file); t.oncomplete = () => { d.close(); resolve(); }; t.onerror = t.onabort = () => { d.close(); reject(Error('Súbor sa neuložil v zariadení. Skontrolujte voľné miesto.')); }; }); }
+async function fileType(file, name) {
+    if (!file.size || file.size > 100 * 1024 * 1024)
+        throw Error('Príloha musí mať 1 B až 100 MB.');
+    const b = new Uint8Array(await file.slice(0, 16).arrayBuffer()), s = String.fromCharCode(...b);
+    if (s.startsWith('%PDF-'))
+        return 'application/pdf';
+    if (b[0] === 255 && b[1] === 216 && b[2] === 255)
+        return 'image/jpeg';
+    if (b[0] === 137 && s.slice(1, 4) === 'PNG')
+        return 'image/png';
+    if (s.startsWith('RIFF') && s.slice(8, 12) === 'WEBP')
+        return 'image/webp';
+    if (s.slice(4, 8) === 'ftyp' && ['heic', 'heix', 'hevc', 'hevx', 'mif1'].includes(s.slice(8, 12)))
+        return 'image/heic';
+    throw Error('Podporované sú PDF a fotografie JPG, PNG, WebP alebo HEIC: ' + name);
 }
 
 },
@@ -1250,10 +1620,15 @@ exports.oneDriveState = oneDriveState;
 exports.validClientId = validClientId;
 exports.saveOneDriveClientId = saveOneDriveClientId;
 exports.prepareOneDrive = prepareOneDrive;
+exports.graph = graph;
 exports.connectOneDrive = connectOneDrive;
 exports.disconnectOneDrive = disconnectOneDrive;
 exports.backupFilename = backupFilename;
 exports.uploadOneDriveBackup = uploadOneDriveBackup;
+exports.oneDriveAccountId = oneDriveAccountId;
+exports.resumeOneDrive = resumeOneDrive;
+exports.uploadAttachment = uploadAttachment;
+exports.attachmentBlob = attachmentBlob;
 const backup_js_1 = require("./backup.js");
 const KEY = 'spektra-onedrive-client-id';
 exports.ONE_DRIVE_SCOPE = 'https://graph.microsoft.com/Files.ReadWrite.AppFolder';
@@ -1261,7 +1636,7 @@ exports.ONE_DRIVE_REDIRECT = 'https://spektra-servis.vercel.app/onedrive-callbac
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 let client = null, account = null, rootId = '', initialization = null;
 let lastFile = '';
-function oneDriveClientId() { return localStorage.getItem(KEY) || ''; }
+function oneDriveClientId() { return localStorage.getItem(KEY) || '662cbf89-7921-40dd-9e92-6c60daa8b37e'; }
 function oneDriveState() { return { connected: !!account && !!rootId, account: account?.username || account?.name || '', lastFile }; }
 function validClientId(value) { const id = value.trim(); if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))
     throw Error('Vložte Application (client) ID z Microsoft registrácie – identifikátor vo formáte UUID.'); return id; }
@@ -1295,7 +1670,7 @@ function prepareOneDrive() {
             throw Error('OneDrive pripájajte z produkčnej adresy spektra-servis.vercel.app.');
         const id = validClientId(oneDriveClientId());
         await library();
-        client = new window.msal.PublicClientApplication({ auth: { clientId: id, authority: 'https://login.microsoftonline.com/consumers', redirectUri: exports.ONE_DRIVE_REDIRECT }, cache: { cacheLocation: 'memoryStorage' }, system: { loggerOptions: { piiLoggingEnabled: false } } });
+        client = new window.msal.PublicClientApplication({ auth: { clientId: id, authority: 'https://login.microsoftonline.com/consumers', redirectUri: exports.ONE_DRIVE_REDIRECT }, cache: { cacheLocation: 'localStorage' }, system: { loggerOptions: { piiLoggingEnabled: false } } });
         await client.initialize();
     })();
     initialization.catch(() => { initialization = null; client = null; });
@@ -1327,6 +1702,7 @@ async function connectOneDrive() {
     if (!response.account)
         throw Error('Microsoft nevrátil prihlásený účet.');
     account = response.account;
+    localStorage.setItem('spektra-onedrive-account', account.homeAccountId);
     rootId = '';
     lastFile = '';
     try {
@@ -1340,7 +1716,7 @@ async function connectOneDrive() {
         throw error;
     }
 }
-async function disconnectOneDrive() { const old = account; account = null; rootId = ''; lastFile = ''; if (client)
+async function disconnectOneDrive() { const old = account; localStorage.removeItem('spektra-onedrive-account'); account = null; rootId = ''; lastFile = ''; if (client)
     await client.clearCache(old ? { account: old } : undefined); }
 function backupFilename(now = new Date()) { return 'Spektra-zaloha-' + now.toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomUUID().slice(0, 8) + '.spektra'; }
 async function uploadOneDriveBackup(data, password) {
@@ -1360,6 +1736,51 @@ async function uploadOneDriveBackup(data, password) {
     lastFile = name;
     return name;
 }
+function oneDriveAccountId() { return account?.homeAccountId || ''; }
+async function resumeOneDrive() {
+    await prepareOneDrive();
+    const accounts = client.getAllAccounts(), last = localStorage.getItem('spektra-onedrive-account');
+    const previous = accounts.find(a => a.homeAccountId === last);
+    if (!previous)
+        return;
+    account = previous;
+    try {
+        const root = await graph('/me/drive/special/approot');
+        if (typeof root.id !== 'string' || !root.folder)
+            throw Error('OneDrive nie je dostupný.');
+        rootId = root.id;
+    }
+    catch {
+        account = null;
+        rootId = '';
+    }
+}
+async function uploadAttachment(file, id, mime, expectedAccount) {
+    if (!rootId || oneDriveAccountId() !== expectedAccount)
+        throw Error('Pripojte pôvodný OneDrive účet pre tento súbor.');
+    const folder = rootId, ext = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif' }[mime];
+    if (!ext || !/^[a-zA-Z0-9_-]+$/.test(id) || file.size > 100 * 1024 * 1024)
+        throw Error('Neplatná príloha.');
+    const result = await graph('/me/drive/items/' + encodeURIComponent(folder) + ':/' + encodeURIComponent('Priloha-' + id + '.' + ext) + ':/content', { method: 'PUT', headers: { 'Content-Type': mime }, body: file });
+    if (oneDriveAccountId() !== expectedAccount)
+        throw Error('OneDrive účet sa zmenil.');
+    if (typeof result.id !== 'string' || result.size !== file.size)
+        throw Error('OneDrive nepotvrdil celý súbor. Prenos sa zopakuje.');
+    return result.id;
+}
+async function attachmentBlob(itemId, expectedAccount) {
+    if (oneDriveAccountId() !== expectedAccount || !rootId)
+        throw Error('Pripojte OneDrive účet, na ktorom je príloha uložená.');
+    const result = await graph('/me/drive/items/' + encodeURIComponent(itemId) + '?$select=id,@microsoft.graph.downloadUrl');
+    const url = result['@microsoft.graph.downloadUrl'];
+    if (typeof url !== 'string' || !url.startsWith('https://'))
+        throw Error('Súbor nie je dostupný.');
+    // Preauthenticated URL: never forward an Authorization header to the download host.
+    const response = await fetch(url, { signal: AbortSignal.timeout(120000), credentials: 'omit', referrerPolicy: 'no-referrer' });
+    if (!response.ok)
+        throw Error('Súbor sa nepodarilo stiahnuť.');
+    return response.blob();
+}
 
 },
 "lib/store.js":function(require,module,exports){
@@ -1367,6 +1788,9 @@ async function uploadOneDriveBackup(data, password) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.load = load;
 exports.save = save;
+exports.loadSyncMeta = loadSyncMeta;
+exports.recoverySnapshot = recoverySnapshot;
+exports.loadRecovery = loadRecovery;
 const domain_js_1 = require("../domain.js");
 const DB_NAME = 'spektra-servis-v1';
 let openPromise;
@@ -1391,7 +1815,7 @@ async function load(workspace) {
     } }; req.onerror = () => reject(req.error); });
 }
 /** Compare-and-swap inside one transaction prevents silently overwriting a second tab. */
-async function save(workspace, value, expectedRevision) {
+async function save(workspace, value, expectedRevision, syncMeta) {
     const clean = (0, domain_js_1.validateData)(value), db = await database();
     return new Promise((resolve, reject) => {
         const tx = db.transaction('workspaces', 'readwrite'), store = tx.objectStore('workspaces');
@@ -1405,6 +1829,9 @@ async function save(workspace, value, expectedRevision) {
             }
             clean.revision = expectedRevision + 1;
             store.put(clean, workspace);
+            if (syncMeta) {
+                store.put(syncMeta, 'sync-meta');
+            }
         };
         tx.oncomplete = () => { try {
             const channel = new BroadcastChannel(DB_NAME);
@@ -1416,6 +1843,66 @@ async function save(workspace, value, expectedRevision) {
         tx.onabort = () => reject(problem || new Error('Údaje sa neuložili. Formulár zostal otvorený.'));
     });
 }
+async function loadSyncMeta() { const db = await database(); return new Promise((resolve, reject) => { const r = db.transaction('workspaces').objectStore('workspaces').get('sync-meta'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); }
+async function recoverySnapshot(value) { const db = await database(); return new Promise((resolve, reject) => { const tx = db.transaction('workspaces', 'readwrite'); tx.objectStore('workspaces').put(value, 'before-cloud-link'); tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(tx.error); }); }
+async function loadRecovery() { const db = await database(); return new Promise((resolve, reject) => { const r = db.transaction('workspaces').objectStore('workspaces').get('before-cloud-link'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); }
+
+},
+"lib/sync-merge.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.initialBase = exports.equal = void 0;
+exports.mergeData = mergeData;
+exports.syncPayload = syncPayload;
+const domain_js_1 = require("../domain.js");
+const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+exports.equal = equal;
+/** Three-way merge: no clock-based winner. Concurrent edits of the same field require a choice. */
+function mergeData(base, local, remote, choice) {
+    base = structuredClone(base);
+    local = structuredClone(local);
+    remote = structuredClone(remote);
+    const conflicts = [];
+    function value(b, l, r, path) {
+        if ((0, exports.equal)(l, r) || (0, exports.equal)(b, r))
+            return l;
+        if ((0, exports.equal)(b, l))
+            return r;
+        if (l && r && typeof l === 'object' && typeof r === 'object' && !Array.isArray(l) && !Array.isArray(r)) {
+            const out = {}, bb = (b || {}), ll = l, rr = r;
+            for (const key of new Set([...Object.keys(ll), ...Object.keys(rr)])) {
+                // These are counters/timestamps, not business fields; preserve the greatest observed value.
+                if (['updatedAt', 'version'].includes(key)) {
+                    out[key] = ll[key] > rr[key] ? ll[key] : rr[key];
+                    continue;
+                }
+                out[key] = value(bb[key], ll[key], rr[key], path + '.' + key);
+            }
+            return out;
+        }
+        conflicts.push(path);
+        return choice === 'remote' ? r : l;
+    }
+    function rows(key) {
+        const b = new Map((base[key] || []).map(x => [x.id, x])), l = new Map((local[key] || []).map(x => [x.id, x])), r = new Map((remote[key] || []).map(x => [x.id, x]));
+        return [...new Set([...r.keys(), ...l.keys(), ...b.keys()])].map(id => value(b.get(id), l.get(id), r.get(id), key + '/' + id)).filter(x => x !== undefined);
+    }
+    const out = { ...local, settings: value(base.settings, local.settings, remote.settings, 'profil'), customers: rows('customers'), devices: rows('devices'), jobs: rows('jobs'), tips: rows('tips'), stocks: rows('stocks'), attachments: rows('attachments'), catalogImportedAt: [local.catalogImportedAt || '', remote.catalogImportedAt || ''].sort().pop(), lastBackup: [local.lastBackup, remote.lastBackup].sort().pop() };
+    // Offline devices can allocate the same human-readable number. Keep remote numbers stable.
+    const used = new Set();
+    for (const j of out.jobs) {
+        if (used.has(j.number)) {
+            j.number = (0, domain_js_1.nextNumber)(out, j.number.match(/^S-(\d{4})-/)?.[1] || new Date(j.createdAt).getUTCFullYear().toString());
+        }
+        used.add(j.number);
+    }
+    if (conflicts.length && !choice)
+        return { data: local, conflicts };
+    return { data: (0, domain_js_1.validateData)(out), conflicts };
+}
+function syncPayload(data) { const result = structuredClone(data); result.revision = 0; return result; }
+const initialBase = () => (0, domain_js_1.emptyData)();
+exports.initialBase = initialBase;
 
 },
 "modules/calendar-view.js":function(require,module,exports){
@@ -1435,6 +1922,23 @@ function calendarPage(data, state) {
   <div class="calendar-grid"><div class="daynames">${['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'].map(d => `<span>${d}</span>`).join('')}</div><div class="days ${state.calendarMode === 'week' ? 'week' : ''}">${days.map(day => { const count = scheduled.filter(j => (0, calendar_js_1.localDate)(j.start).startsWith(day)).length; return `<button data-action="select-day" data-date="${day}" aria-label="${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day))}, ${count} udalostí" aria-pressed="${day === state.date}" class="day ${day === state.date ? 'selected' : ''} ${day === (0, calendar_js_1.today)() ? 'today' : ''} ${day.slice(0, 7) !== state.month && state.calendarMode === 'month' ? 'other-month' : ''}"><span>${Number(day.slice(8))}</span>${count ? `<span class="day-dots" aria-hidden="true">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span><small>${count} ${count === 1 ? 'výjazd' : 'výjazdy'}</small>` : ''}</button>`; }).join('')}</div></div><div class="calendar-footer"><span><i class="legend-dot"></i> Výjazd v aplikácii Spektra</span>${(0, ui_js_1.button)('Export kalendára .ics', 'export-calendar', 'download', 'btn ghost')}</div></section>
   <section class="panel agenda"><div class="panel-head"><div><span class="eyebrow">AGENDA DŇA</span><h2>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(state.date, { weekday: 'long', day: 'numeric', month: 'numeric' }))}</h2></div></div>${daily.length ? daily.map(j => (0, ui_js_1.jobCard)(j, data, true)).join('') : (0, ui_js_1.empty)('Žiadny výjazd', 'Vyberte deň alebo naplánujte novú zákazku.', (0, ui_js_1.button)('Pridať termín', 'new-job-day', 'plus'), 'calendar')}</section></div>
   <div class="inline-note">Google Kalendár: termín otvoríte tlačidlom v detaile zákazky a uložíte ho ručne. Automatická synchronizácia ani odosielanie upozornení zatiaľ nie sú zapnuté. Import .ics nemusí v každom kalendári preniesť pripomienku; skontrolujte ju po importe.</div>`;
+}
+
+},
+"modules/cloud-settings.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.cloudSettings = cloudSettings;
+exports.filesPage = filesPage;
+const cloud_js_1 = require("../lib/cloud.js");
+const ui_js_1 = require("../ui.js");
+function cloudSettings(demo) {
+    if (demo)
+        return '';
+    return `<section class="panel settings-panel full"><h2>Synchronizácia PC ↔ mobil</h2><p id="sync-status">${(0, ui_js_1.e)(cloud_js_1.cloudState.status)}</p>${cloud_js_1.cloudState.email ? `<p>Účet: <strong>${(0, ui_js_1.e)(cloud_js_1.cloudState.email)}</strong></p><div class="button-row">${!cloud_js_1.cloudState.enabled ? (0, ui_js_1.button)('Zapnúť synchronizáciu zariadenia', 'sync-enable', '', 'btn primary') : (0, ui_js_1.button)('Synchronizovať teraz', 'sync-now')}${(0, ui_js_1.button)('Odhlásiť synchronizáciu', 'sync-logout')}</div>` : `<p>Na oboch zariadeniach sa prihláste rovnakým e-mailom a heslom ako v Cenových ponukách.</p><form id="sync-login-form">${(0, ui_js_1.field)('E-mail', 'email', '', 'email', 'required autocomplete="username"')}${(0, ui_js_1.field)('Heslo', 'password', '', 'password', 'required autocomplete="current-password"')}<button class="btn primary" type="submit">Prihlásiť synchronizáciu</button></form>`}<p>Zákazky, zákazníci, zariadenia, kalkulácie, sklad, poznatky a zoznam príloh sa synchronizujú automaticky po uložení a každých 15 sekúnd, kým je aplikácia otvorená. Bez internetu pracujete lokálne. Pri otvorenom formulári sa prijatie zmien odloží do jeho zatvorenia.</p>${cloud_js_1.cloudState.conflicts.length ? `<div class="notice"><strong>Súbežné úpravy vyžadujú rozhodnutie</strong><p>${(0, ui_js_1.e)(cloud_js_1.cloudState.conflicts.slice(0, 12).join(', '))}</p><p>Stiahnite si miestnu zálohu pred výberom. Výber sa týka iba konfliktných polí; ostatné zmeny sa zlúčia.</p>${(0, ui_js_1.button)('Pre konflikty ponechať toto zariadenie', 'sync-local')}${(0, ui_js_1.button)('Pre konflikty použiť cloud', 'sync-remote')}</div>` : ''}${(0, ui_js_1.button)('Stiahnuť ochrannú kópiu pred prepojením / riešením konfliktu', 'sync-recovery', '', 'btn ghost')}<p class="tiny muted">Odhlásenie ponechá miestne údaje. Používajte zámok zariadenia. Synchronizácia neprepisuje pôvodné tabuľky Cenových ponúk.</p></section>`;
+}
+function filesPage(data, queue, status) {
+    return `<section class="panel settings-panel"><h1>PDF a fotografie · OneDrive</h1><p>Vyberte PDF protokol, návod alebo fotografie. Súbory sa po pridaní automaticky odošlú do súkromného priečinka aplikácie v OneDrive. Na druhom zariadení použite rovnaký účet synchronizácie aj OneDrive.</p><p>Najskôr pripojte synchronizáciu a OneDrive v Nastaveniach. Limit jedného súboru: 100 MB. Prílohy sú uložené ako bežné súbory; heslo šifrovanej zálohy sa na ne nevzťahuje.</p><form id="attachment-form"><label class="field">Priradiť k zákazke<select name="jobId"><option value="">Spoločné dokumenty / návody</option>${data.jobs.map(j => `<option value="${(0, ui_js_1.e)(j.id)}">${(0, ui_js_1.e)(j.number + ' · ' + j.title)}</option>`).join('')}</select></label><label class="field">PDF alebo fotografie<input type="file" name="files" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" multiple required></label><button type="submit" class="btn primary">Pridať a automaticky odoslať</button></form><div class="button-row">${(0, ui_js_1.button)('Preniesť aj miestne PDF návody', 'files-manuals')}${(0, ui_js_1.button)('Zopakovať prenos', 'files-retry')}</div><p id="file-status">${(0, ui_js_1.e)(status)}</p>${queue.length ? `<h3>Čakajúce prenosy v tomto zariadení (${queue.length})</h3>${queue.map(f => `<p>${(0, ui_js_1.e)(f.name)} ${(0, ui_js_1.button)('Zrušiť čakajúci prenos', 'files-cancel', '', 'btn ghost', `data-id="${(0, ui_js_1.e)(f.id)}"`)}</p>`).join('')}` : ''}<h3>Uložené prílohy (${(data.attachments || []).length})</h3>${(data.attachments || []).map(f => `<div class="module-item"><strong>${(0, ui_js_1.e)(f.name)}</strong><p>${(0, ui_js_1.e)(data.jobs.find(j => j.id === f.jobId)?.number || 'Spoločný dokument')} · ${Math.ceil(f.bytes / 1024)} kB · ${(0, ui_js_1.e)(f.createdAt.slice(0, 10))}</p>${(0, ui_js_1.button)('Stiahnuť z OneDrive', 'files-download', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(f.id)}"`)}</div>`).join('') || '<p>Zatiaľ nie sú uložené prílohy.</p>'}</section>`;
 }
 
 },
@@ -1556,7 +2060,7 @@ function editorContent(editor, data) {
         title = j ? j.number + ' · detail zákazky' : 'Nová zákazka';
         content = `<p class="form-intro">Vyplňte zákazníka a zadanie. Termín môžete doplniť neskôr.</p><fieldset class="job-section"><legend>1. Zákazník a zariadenie</legend>${(0, ui_js_1.select)('Zákazník *', 'customerId', cId, customerOptions(cId), 'required id="job-customer"')}<label class="field"><span>Zariadenie</span><select name="deviceId" id="job-device">${deviceOptions(data, cId, deviceId)}</select></label>${(0, ui_js_1.field)('Adresa výjazdu', 'address', j?.address || device?.location || customer?.address || '')}</fieldset><fieldset class="job-section"><legend>2. Zadanie zákazky</legend>${(0, ui_js_1.field)('Názov zákazky *', 'title', j?.title || (device ? 'Servis — ' + (0, domain_js_1.deviceName)(device) : ''), 'text', 'required')}${(0, ui_js_1.area)('Zadanie / prejav poruchy', 'issue', j?.issue)}<div class="form-grid">${(0, ui_js_1.select)('Druh práce', 'kind', j?.kind || 'servis', Object.entries(domain_js_1.KINDS))}${(0, ui_js_1.select)('Stav zákazky', 'status', j?.status || (editor.day ? 'planned' : 'new'), Object.entries(domain_js_1.STATUSES))}</div></fieldset><fieldset class="job-section"><legend>3. Termín výjazdu</legend><p class="tiny muted">Bez termínu zostane zákazka v zozname na naplánovanie.</p><div class="form-grid">${(0, ui_js_1.field)('Začiatok výjazdu', 'start', j?.start ? (0, calendar_js_1.localDate)(j.start) : editor.day ? editor.day + 'T09:00' : '', 'datetime-local', '', 'Časové pásmo Europe/Bratislava.')}${(0, ui_js_1.field)('Trvanie v minútach *', 'duration', String(j?.duration || 60), 'number', 'required min="5" max="1440" step="1"')}</div></fieldset><details class="job-completion" ${j ? 'open' : ''}><summary>4. Dokončenie servisu a úhrada</summary><div class="completion-body">${(0, ui_js_1.area)('Vykonaný zásah / riešenie', 'resolution', j?.resolution)}<div class="form-grid">${(0, ui_js_1.select)('Technický výsledok', 'result', j?.result || 'pending', [['pending', 'Kontrola nedokončená'], ['ok', 'Vyhovuje (potvrdil technik)'], ['fail', 'Nevyhovuje (potvrdil technik)']])}${(0, ui_js_1.select)('Úhrada', 'payment', j?.payment || 'unpaid', [['unpaid', 'Neuhradené'], ['paid', 'Uhradené (ručné potvrdenie)']])}${(0, ui_js_1.field)('Dohodnutá konečná suma (€)', 'amount', j?.amount === null || j?.amount === undefined ? '' : String(j.amount), 'number', 'min="0" max="1000000" step="0.01"')}</div><div class="inline-note">Dokončenie zákazky nemení technický výsledok ani úhradu. Táto karta nie je revízna správa.</div></div></details>`;
         if (j)
-            tools = `${(0, ui_js_1.button)('Kalkulácia servisu', 'cost-job', '', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Cenová ponuka', 'job-quotes', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Správa RS2', 'job-rs2', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${j.costing?.length ? '<div>' + (0, commerce_js_1.costSummary)(j.costing) + '</div>' : ''}${j.start ? (0, ui_js_1.button)('Synchronizovať s Google', 'google-sync-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Pridať do Google (ručne)', 'google-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Do Google sa prenesie uložená verzia zákazky. Pred prenosom uložte úpravy. Pripomienku nastavte po uložení v Google.</p>`;
+            tools = `${(0, ui_js_1.button)('PDF a fotografie', 'job-files', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Kalkulácia servisu', 'cost-job', '', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Cenová ponuka', 'job-quotes', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Správa RS2', 'job-rs2', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${j.costing?.length ? '<div>' + (0, commerce_js_1.costSummary)(j.costing) + '</div>' : ''}${j.start ? (0, ui_js_1.button)('Synchronizovať s Google', 'google-sync-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Pridať do Google (ručne)', 'google-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Do Google sa prenesie uložená verzia zákazky. Pred prenosom uložte úpravy. Pripomienku nastavte po uložení v Google.</p>`;
     }
     if (editor.type === 'tip') {
         const t = data.tips.find(x => x.id === editor.id), job = data.jobs.find(j => j.id === editor.sourceJobId), d = data.devices.find(d => d.id === job?.deviceId);
@@ -1762,7 +2266,7 @@ function oneDriveSettings(demo) {
     if (demo)
         return '<section class="panel settings-panel"><h2>OneDrive</h2><p>Pripojenie je dostupné vo vlastnom pracovnom priestore.</p></section>';
     const state = (0, onedrive_js_1.oneDriveState)(), configured = !!(0, onedrive_js_1.oneDriveClientId)();
-    return `<section class="panel settings-panel full"><div class="panel-head"><h2>OneDrive · Microsoft 365 Family</h2><span class="tag">${state.connected ? 'Pripojené' : 'Nepripojené'}</span></div><p>Šifrované zálohy zákaziek, kontaktov, skladových kariet a kalkulácií sa ukladajú do priečinka aplikácie v OneDrive. PDF návody a fotografie zatiaľ nie sú súčasťou tejto zálohy.</p>${state.connected ? `<p><strong>Účet: ${(0, ui_js_1.e)(state.account)}</strong></p>${(0, ui_js_1.field)('Heslo cloudovej zálohy', 'oneDrivePassword', '', 'password', 'id="onedrive-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez tohto hesla zálohu neobnovíte. Heslo sa neukladá.')}<div class="button-row">${(0, ui_js_1.button)('Uložiť šifrovanú zálohu', 'onedrive-backup', 'upload', 'btn primary')}${(0, ui_js_1.button)('Odpojiť reláciu', 'onedrive-disconnect', '', 'btn secondary')}</div>` : ''}${configured ? (0, ui_js_1.button)(state.connected ? 'Pripojiť / zmeniť účet' : 'Pripojiť OneDrive', 'onedrive-connect', '', 'btn secondary') : ''}${state.lastFile ? `<p class="notice">Uložený súbor: ${(0, ui_js_1.e)(state.lastFile)}</p>` : ''}<p class="tiny muted">Záloha sa vytvára na kliknutie. Údaje aplikácie sa automaticky nesynchronizujú medzi zariadeniami. Prihlásenie platí počas otvorenia tejto stránky; po obnovení sa pripojte znova. Odpojenie relácie nemaže súbory ani udelený súhlas.</p><a class="btn ghost" href="https://onedrive.live.com/" target="_blank" rel="noopener noreferrer">Otvoriť OneDrive</a><details ${configured ? '' : 'open'}><summary>Prvé nastavenie OneDrive</summary><p>V Microsoft Entra vytvorte registráciu <strong>Spektra Servis</strong> pre osobné Microsoft účty. Pridajte platformu <strong>Single-page application (SPA)</strong> s návratovou adresou:</p><p><code>${onedrive_js_1.ONE_DRIVE_REDIRECT}</code></p><p>Microsoft Graph → Delegated permissions → <strong>Files.ReadWrite.AppFolder</strong>. Nepotrebujeme prístup ku všetkým súborom. Nevytvárajte Client secret ani nezapínajte implicitné tokeny.</p>${(0, ui_js_1.field)('Application (client) ID', 'oneDriveClientId', (0, onedrive_js_1.oneDriveClientId)(), 'text', 'id="onedrive-client-id" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"')}${(0, ui_js_1.button)('Uložiť nastavenie OneDrive', 'onedrive-config-save', 'check')}<p><a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Otvoriť registrácie aplikácií Microsoft</a></p></details></section>`;
+    return `<section class="panel settings-panel full"><div class="panel-head"><h2>OneDrive · Microsoft 365 Family</h2><span class="tag">${state.connected ? 'Pripojené' : 'Nepripojené'}</span></div><p>Šifrované zálohy zákaziek, kontaktov, skladových kariet a kalkulácií sa ukladajú do priečinka aplikácie v OneDrive. PDF a fotografie ukladajte cez modul Súbory / OneDrive; binárne prílohy nie sú súčasťou šifrovanej zálohy.</p>${state.connected ? `<p><strong>Účet: ${(0, ui_js_1.e)(state.account)}</strong></p>${(0, ui_js_1.field)('Heslo cloudovej zálohy', 'oneDrivePassword', '', 'password', 'id="onedrive-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez tohto hesla zálohu neobnovíte. Heslo sa neukladá.')}<div class="button-row">${(0, ui_js_1.button)('Uložiť šifrovanú zálohu', 'onedrive-backup', 'upload', 'btn primary')}${(0, ui_js_1.button)('Odpojiť reláciu', 'onedrive-disconnect', '', 'btn secondary')}</div>` : ''}${configured ? (0, ui_js_1.button)(state.connected ? 'Pripojiť / zmeniť účet' : 'Pripojiť OneDrive', 'onedrive-connect', '', 'btn secondary') : ''}${state.lastFile ? `<p class="notice">Uložený súbor: ${(0, ui_js_1.e)(state.lastFile)}</p>` : ''}<p class="tiny muted">Záloha sa vytvára na kliknutie. Databázu synchronizuje samostatné prihlásenie vyššie. OneDrive si pamätá prihlásenie na tomto zariadení; Microsoft môže občas vyžiadať nové potvrdenie. Odpojenie relácie nemaže súbory ani udelený súhlas.</p><a class="btn ghost" href="https://onedrive.live.com/" target="_blank" rel="noopener noreferrer">Otvoriť OneDrive</a><details ${configured ? '' : 'open'}><summary>Prvé nastavenie OneDrive</summary><p>V Microsoft Entra vytvorte registráciu <strong>Spektra Servis</strong> pre osobné Microsoft účty. Pridajte platformu <strong>Single-page application (SPA)</strong> s návratovou adresou:</p><p><code>${onedrive_js_1.ONE_DRIVE_REDIRECT}</code></p><p>Microsoft Graph → Delegated permissions → <strong>Files.ReadWrite.AppFolder</strong>. Nepotrebujeme prístup ku všetkým súborom. Nevytvárajte Client secret ani nezapínajte implicitné tokeny.</p>${(0, ui_js_1.field)('Application (client) ID', 'oneDriveClientId', (0, onedrive_js_1.oneDriveClientId)(), 'text', 'id="onedrive-client-id" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"')}${(0, ui_js_1.button)('Uložiť nastavenie OneDrive', 'onedrive-config-save', 'check')}<p><a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">Otvoriť registrácie aplikácií Microsoft</a></p></details></section>`;
 }
 
 },
@@ -1770,6 +2274,7 @@ function oneDriveSettings(demo) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.settingsPage = settingsPage;
+const cloud_settings_js_1 = require("./cloud-settings.js");
 const onedrive_settings_js_1 = require("./onedrive-settings.js");
 const google_settings_js_1 = require("./google-settings.js");
 const domain_js_1 = require("../domain.js");
@@ -1777,12 +2282,12 @@ const ui_js_1 = require("../ui.js");
 function settingsPage(data, isDemo) {
     const counts = data.customers.length + data.devices.length + data.jobs.length + data.tips.length;
     return (0, ui_js_1.heading)('JEDEN TECHNIK · BEZ PAUŠÁLU', 'Nastavenia a zálohy', 'Vaše dáta zostávajú pod vašou kontrolou.') +
-        `<div class="settings-grid">${(0, onedrive_settings_js_1.oneDriveSettings)(isDemo)}${(0, google_settings_js_1.googleSettings)(isDemo)}<section class="panel settings-panel"><div class="panel-head"><h2>Pracovný profil</h2>${(0, ui_js_1.icon)('customers')}</div><dl class="detail-list"><dt>Technik</dt><dd>${(0, ui_js_1.e)(data.settings.technician)}</dd><dt>Firma</dt><dd>${(0, ui_js_1.e)(data.settings.company)}</dd><dt>Východisko</dt><dd>${(0, ui_js_1.e)(data.settings.baseAddress)}</dd></dl>${(0, ui_js_1.button)('Upraviť profil', 'edit-settings', 'edit')}</section>
-  <section class="panel settings-panel"><div class="panel-head"><h2>Bezpečnosť údajov</h2>${(0, ui_js_1.icon)('lock')}</div><p>Táto etapa ukladá údaje do IndexedDB v tomto prehliadači. Zálohu môžete uložiť na OneDrive; zákazky sa zatiaľ automaticky nesynchronizujú. Nie je to ochrana heslom — používajte uzamknuté zariadenie.</p><p class="notice">Vymazanie údajov prehliadača alebo strata zariadenia môže vymazať archív. Údaje sa automaticky neprenesú do iného telefónu.</p><p class="tiny muted">Počet záznamov: ${counts} · veľkosť textových údajov: ${Math.ceil(new TextEncoder().encode(JSON.stringify(data)).length / 1024)} kB</p>${(0, ui_js_1.button)('Požiadať o trvalé úložisko', 'persist-storage', 'shield')}</section>
+        `<div class="settings-grid">${(0, cloud_settings_js_1.cloudSettings)(isDemo)}${(0, onedrive_settings_js_1.oneDriveSettings)(isDemo)}${(0, google_settings_js_1.googleSettings)(isDemo)}<section class="panel settings-panel"><div class="panel-head"><h2>Pracovný profil</h2>${(0, ui_js_1.icon)('customers')}</div><dl class="detail-list"><dt>Technik</dt><dd>${(0, ui_js_1.e)(data.settings.technician)}</dd><dt>Firma</dt><dd>${(0, ui_js_1.e)(data.settings.company)}</dd><dt>Východisko</dt><dd>${(0, ui_js_1.e)(data.settings.baseAddress)}</dd></dl>${(0, ui_js_1.button)('Upraviť profil', 'edit-settings', 'edit')}</section>
+  <section class="panel settings-panel"><div class="panel-head"><h2>Bezpečnosť údajov</h2>${(0, ui_js_1.icon)('lock')}</div><p>Údaje sa ukladajú do IndexedDB aj počas práce offline. Po zapnutí synchronizácie sa prenášajú do vášho účtu v cloude. Zálohu môžete uložiť na OneDrive. Nie je to ochrana heslom — používajte uzamknuté zariadenie.</p><p class="notice">Vymazanie údajov prehliadača alebo strata zariadenia môže vymazať archív. Na novom zariadení zapnite synchronizáciu pod rovnakým účtom.</p><p class="tiny muted">Počet záznamov: ${counts} · veľkosť textových údajov: ${Math.ceil(new TextEncoder().encode(JSON.stringify(data)).length / 1024)} kB</p>${(0, ui_js_1.button)('Požiadať o trvalé úložisko', 'persist-storage', 'shield')}</section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Export zálohy</h2>${(0, ui_js_1.icon)('download')}</div><p>Export zahŕňa zákazníkov, zariadenia, zákazky, servisné poznatky, skladové karty, kalkulácie a profil. Nahraté PDF návody tento export neobsahuje; originály si ponechajte alebo stiahnite z knižnice. Pre osobné údaje odporúčame šifrovanú zálohu.</p>${(0, ui_js_1.field)('Heslo zálohy (voliteľné)', 'backupPassword', '', 'password', 'id="backup-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez hesla sa exportuje čitateľný JSON. Heslo sa neukladá a nedá sa obnoviť.')}<div class="button-row">${(0, ui_js_1.button)('Stiahnuť zálohu', 'export-backup', 'download', 'btn primary')}</div><p class="tiny muted">Súbor uložte mimo tohto zariadenia na bezpečné miesto.</p></section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Obnovenie zo zálohy</h2>${(0, ui_js_1.icon)('upload')}</div><p>Pred nahradením údajov sa zobrazí počet záznamov na kontrolu. Bez vášho potvrdenia sa nič nemení.</p>${(0, ui_js_1.field)('Heslo pre obnovenie', 'restorePassword', '', 'password', 'id="restore-password" autocomplete="off"')}<label class="field"><span>Súbor zálohy</span><input type="file" id="restore-file" accept=".json,.spektra,application/json"></label>${(0, ui_js_1.button)('Skontrolovať zálohu', 'preview-backup', 'upload')}</section>
-  <section class="panel settings-panel full"><div class="panel-head"><div><h2>Moduly aplikácie</h2><p>Verzia ${domain_js_1.APP_VERSION} · prvá funkčná etapa</p></div><span class="badge done"><i></i>Lokálna verzia</span></div><div class="module-grid">${[['Prehľad a štatistiky', 'Hotové', 'Počty zákaziek a blížiace sa servisy.'], ['Zákazníci a zariadenia', 'Hotové', 'Evidencia, úpravy, archív a história.'], ['Zákazky a kalendár', 'Hotové', 'Termíny, stavy, konflikty, export .ics.'], ['Rady, poruchy a kódy', 'Hotové', 'Vlastné záznamy s označením overenia.'], ['Cloud a Google prihlásenie', 'Ďalšia etapa', 'Samostatný Firebase Spark projekt, pravidlá pre jedného technika.'], ['Google Kalendár', 'Vyžaduje nastavenie', 'Pripojenie účtu a prenos zákazky na kliknutie.'], ['Revízne PDF a podpisy', 'Ďalšia etapa', 'Bez zásahu do existujúcej RS2.'], ['Plynové skupiny a paragrafy', 'Obsah na doplnenie', 'Pripravená kategória; bez automatického právneho výkladu.']].map(([title, state, text]) => `<div class="module-item"><span class="tiny ${state === 'Hotové' ? 'success-text' : 'muted'}">${(0, ui_js_1.e)(state)}</span><h3>${(0, ui_js_1.e)(title)}</h3><p>${(0, ui_js_1.e)(text)}</p></div>`).join('')}</div></section>
-  <section class="panel settings-panel full"><h2>Bezplatná prevádzka</h2><p>Aplikácia je nasadená na Verceli. Zákazky a PDF zostávajú v prehliadači. Voliteľné Google prepojenie odosiela vybrané termíny do vášho kalendára; limity poskytovateľov sa môžu meniť.</p><div class="button-row"><a class="btn ghost" href="https://firebase.google.com/pricing" target="_blank" rel="noopener noreferrer">Overiť limity Firebase ${(0, ui_js_1.icon)('external')}</a>${(0, ui_js_1.button)(isDemo ? 'Opustiť ukážku' : 'Otvoriť ukážkové údaje', isDemo ? 'exit-demo' : 'enter-demo', 'sun')}</div><p class="tiny muted">Ukážkové dáta sú oddelené od vašich skutočných záznamov.</p></section></div>`;
+  <section class="panel settings-panel full"><div class="panel-head"><div><h2>Moduly aplikácie</h2><p>Verzia ${domain_js_1.APP_VERSION} · prvá funkčná etapa</p></div><span class="badge done"><i></i>Lokálna verzia</span></div><div class="module-grid">${[['Prehľad a štatistiky', 'Hotové', 'Počty zákaziek a blížiace sa servisy.'], ['Zákazníci a zariadenia', 'Hotové', 'Evidencia, úpravy, archív a história.'], ['Zákazky a kalendár', 'Hotové', 'Termíny, stavy, konflikty, export .ics.'], ['Rady, poruchy a kódy', 'Hotové', 'Vlastné záznamy s označením overenia.'], ['Synchronizácia PC a mobil', 'Hotové', 'Rovnaký účet ako Cenové ponuky; offline zmeny a kontrola konfliktov.'], ['Google Kalendár', 'Vyžaduje nastavenie', 'Pripojenie účtu a prenos zákazky na kliknutie.'], ['Revízne PDF a podpisy', 'Ďalšia etapa', 'Bez zásahu do existujúcej RS2.'], ['Plynové skupiny a paragrafy', 'Obsah na doplnenie', 'Pripravená kategória; bez automatického právneho výkladu.']].map(([title, state, text]) => `<div class="module-item"><span class="tiny ${state === 'Hotové' ? 'success-text' : 'muted'}">${(0, ui_js_1.e)(state)}</span><h3>${(0, ui_js_1.e)(title)}</h3><p>${(0, ui_js_1.e)(text)}</p></div>`).join('')}</div></section>
+  <section class="panel settings-panel full"><h2>Bezplatná prevádzka</h2><p>Aplikácia je nasadená na Verceli. Zákazky sa po prihlásení synchronizujú cez Supabase, prílohy sa ukladajú do OneDrive. Voliteľné Google prepojenie odosiela vybrané termíny do vášho kalendára; limity poskytovateľov sa môžu meniť.</p><div class="button-row"><a class="btn ghost" href="https://supabase.com/pricing" target="_blank" rel="noopener noreferrer">Overiť limity Supabase ${(0, ui_js_1.icon)('external')}</a>${(0, ui_js_1.button)(isDemo ? 'Opustiť ukážku' : 'Otvoriť ukážkové údaje', isDemo ? 'exit-demo' : 'enter-demo', 'sun')}</div><p class="tiny muted">Ukážkové dáta sú oddelené od vašich skutočných záznamov.</p></section></div>`;
 }
 
 },

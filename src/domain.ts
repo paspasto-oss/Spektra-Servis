@@ -11,8 +11,9 @@ export interface Customer extends Base { name: string; company: string; phone: s
 export interface Device extends Base { customerId: string; type: keyof typeof DEVICE_TYPES; manufacturer: string; model: string; serial: string; location: string; nextService: string; notes: string; archived: boolean }
 export interface Job extends Base { number: string; customerId: string; deviceId: string; title: string; kind: Kind; status: JobStatus; start: string; duration: number; address: string; issue: string; resolution: string; result: 'pending' | 'ok' | 'fail'; payment: 'unpaid' | 'paid'; amount: number | null; costing?: CostLine[]; version: number }
 export interface Tip extends Base { title: string; category: 'fault' | 'tip' | 'regulation'; manufacturer: string; model: string; code: string; symptoms: string; solution: string; source: string; verification: 'draft' | 'field' | 'manufacturer'; verifiedAt: string; jobId: string }
+export interface Attachment extends Base { name:string; mime:string; bytes:number; jobId:string; itemId:string; driveAccount:string; manualId:string }
 export interface Settings { technician: string; company: string; baseAddress: string }
-export interface Data { schemaVersion: 1; revision: number; customers: Customer[]; devices: Device[]; jobs: Job[]; tips: Tip[]; settings: Settings; lastBackup: string; stocks?: Stock[]; catalogImportedAt?: string }
+export interface Data { schemaVersion: 1; revision: number; customers: Customer[]; devices: Device[]; jobs: Job[]; tips: Tip[]; settings: Settings; lastBackup: string; stocks?: Stock[]; catalogImportedAt?: string; attachments?: Attachment[] }
 export const stamp = (): Base => { const now = new Date().toISOString(); return { id: crypto.randomUUID(), createdAt: now, updatedAt: now }; };
 export function emptyData(): Data { return { schemaVersion: 1, revision: 0, customers: [], devices: [], jobs: [], tips: [], settings: { technician: 'Pavol Pastorek', company: 'Spektra Install s.r.o.', baseAddress: 'Hollého 210, Rajec' }, lastBackup: '' }; }
 export const normalize = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('sk').trim();
@@ -46,7 +47,9 @@ export function validateData(input: unknown): Data {
     tips: arr(root.tips, 'poradňa', o => ({ ...base(o), title: str(o.title, 'názov', 200), category: choice(o.category, ['fault', 'tip', 'regulation'], 'kategória rady'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), code: str(o.code, 'kód', 80), symptoms: str(o.symptoms, 'prejav'), solution: str(o.solution, 'riešenie'), source: str(o.source, 'zdroj', 2000), verification: choice(o.verification, ['draft', 'field', 'manufacturer'], 'overenie'), verifiedAt: date(o.verifiedAt, 'dátum overenia'), jobId: str(o.jobId, 'odkaz na zákazku', 80) }))
   };
   if (!Number.isInteger(data.revision)) return fail('verzia dát');
-  const all = [...data.customers, ...data.devices, ...data.jobs, ...data.tips];
+  if(root.attachments!==undefined) data.attachments=arr(root.attachments,'prílohy',o=>({...base(o), name:str(o.name,'názov súboru',240),mime:choice(o.mime,['application/pdf','image/jpeg','image/png','image/webp','image/heic','image/heif'],'typ súboru'),bytes:num(o.bytes,'veľkosť súboru',1,100*1024*1024),jobId:str(o.jobId,'zákazka',80),itemId:str(o.itemId,'OneDrive súbor',200),driveAccount:str(o.driveAccount,'OneDrive účet',200),manualId:str(o.manualId,'návod',80)}));
+  for(const a of data.attachments||[]) if(a.jobId&&!data.jobs.some(j=>j.id===a.jobId))return fail('príloha bez zákazky');
+  const all = [...(data.attachments||[]), ...data.customers, ...data.devices, ...data.jobs, ...data.tips];
   if (new Set(all.map(x => x.id)).size !== all.length) return fail('opakované identifikátory');
   const customers = new Set(data.customers.map(x => x.id));
   const devices = new Map(data.devices.map(x => [x.id, x]));
