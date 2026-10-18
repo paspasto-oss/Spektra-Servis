@@ -1,3 +1,4 @@
+import { oneDriveClientId, prepareOneDrive, saveOneDriveClientId, connectOneDrive, disconnectOneDrive, uploadOneDriveBackup } from './lib/onedrive.js';
 import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/commerce.js';
 import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
@@ -22,6 +23,7 @@ let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'cus
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
+let oneDriveBusy=false;
 let integrationBusy=false, costJobId='', costRevision=0, costLines:CostLine[]=[];
 let pendingEditor: { type: EditorType; extra: Partial<Editor> } | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
@@ -85,6 +87,7 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   if (continuation && newCustomerId) openEditor(continuation.type, '', { ...continuation.extra, customerId: newCustomerId });
 }
 async function switchWorkspace(workspace: Workspace): Promise<void> {
+  if(oneDriveBusy)throw Error('Počkajte na dokončenie prenosu OneDrive.');
   if (dialog.open && !closeEditor()) return;
   const newData = await load(workspace);
   data = workspace === 'demo' && !newData.customers.length && !newData.jobs.length ? await save('demo', demoData(), newData.revision) : newData;
@@ -92,6 +95,25 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
 }
 async function act(action: string, el: HTMLElement): Promise<void> {
   const id = el.dataset.id || '';
+  if (action.startsWith('onedrive-')) {
+    if(state.workspace!=='real')throw Error('OneDrive je dostupný iba vo vlastnom pracovnom priestore.');
+    if(dirty||busy)throw Error('Najskôr uložte rozpracovaný formulár.');
+    if(oneDriveBusy)throw Error('Počkajte na dokončenie požiadavky OneDrive.');oneDriveBusy=true;
+    const buttons=Array.from(document.querySelectorAll<HTMLButtonElement>('[data-action^="onedrive-"]'));buttons.forEach(b=>b.disabled=true);
+    try {
+      if(action==='onedrive-config-save'){await saveOneDriveClientId(document.querySelector<HTMLInputElement>('#onedrive-client-id')?.value||'');message('Nastavenie uložené. Kliknite Pripojiť OneDrive.');}
+      if(action==='onedrive-connect'){await connectOneDrive();message('OneDrive bol pripojený. Teraz môžete uložiť zálohu.');}
+      if(action==='onedrive-disconnect'){await disconnectOneDrive();message('Relácia odpojená. Zálohy zostali v OneDrive.');}
+      if(action==='onedrive-backup'){
+        const input=document.querySelector<HTMLInputElement>('#onedrive-password'),password=input?.value||'';if(input)input.value='';
+        const next=structuredClone(data),revision=data.revision;next.lastBackup=new Date().toISOString();
+        const name=await uploadOneDriveBackup(next,password);
+        if(state.workspace==='real'&&data.revision===revision)await commit(next,revision);
+        message('Šifrovaná záloha uložená: '+name);
+      }
+      render();
+    }finally{oneDriveBusy=false;buttons.forEach(b=>b.disabled=false);}return;
+  }
   if (action === 'open-quotes' || action === 'open-rs2') { window.open(APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer'); return; }
   if (action === 'import-commerce') {
     if (state.workspace !== 'real') throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
@@ -219,7 +241,7 @@ document.addEventListener('change', event => {
   if (el.id === 'job-device') { const address = dialog.querySelector<HTMLInputElement>('[name=address]'), device = data.devices.find(d => d.id === el.value); if (address && device?.location) address.value = device.location; }
 });
 window.addEventListener('hashchange', () => { const route = location.hash.slice(1); if (route && state.route !== route) { if (dialog.open && !closeEditor()) { history.replaceState(null, '', '#' + state.route); return; } state.route = routes.some(r => r[0] === route) || route === 'settings' ? route : 'home'; state.query = ''; state.filter = ''; state.selectedCustomer = ''; render(); } });
-window.addEventListener('beforeunload', event => { if (dirty || busy) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', render); window.addEventListener('offline', render);
 interface InstallEvent extends Event { prompt(): Promise<void> }
 let installPrompt: InstallEvent | undefined, waitingWorker: ServiceWorker | undefined;
@@ -235,6 +257,7 @@ async function setupPwa(): Promise<void> {
   } catch { message('Offline inštalácia nie je dostupná; miestne údaje zostávajú zachované.', true); }
 }
 async function init(): Promise<void> {
+  if(oneDriveClientId())void prepareOneDrive().catch(()=>{});
   if (googleClientId()) void prepareGoogle().catch(() => {});
   try { data = await load('real'); ready = true; const route = location.hash.slice(1); if (routes.some(r => r[0] === route) || route === 'settings') state.route = route; render(); await setupPwa(); }
   catch (err) { root.innerHTML = `<main class="fatal"><h1>Údaje sa nepodarilo otvoriť</h1><p>${e(err instanceof Error ? err.message : err)}</p><p>Nič sa neprepísalo. Nevymazávajte údaje prehliadača. Skúste aplikáciu otvoriť cez lokálny server alebo podporovaný prehliadač.</p></main>`; }
