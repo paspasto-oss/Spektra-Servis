@@ -92,6 +92,7 @@ with sync_playwright() as pw:
     page.locator('input[name="title"]').fill('Testovací servis')
     page.locator('input[name="start"]').fill('2026-10-20T09:00')
     page.locator('textarea[name="issue"]').fill('Testovacia porucha')
+    page.locator('.job-completion summary').click()
     page.locator('textarea[name="resolution"]').fill('Testovací poznatok, nie skutočný servisný pokyn.')
     page.locator('#entity-form button[type="submit"]').click()
     page.wait_for_function('!document.querySelector("#editor").open')

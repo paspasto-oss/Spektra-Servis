@@ -152,6 +152,7 @@ document.addEventListener('click', event => { const el = (event.target as Elemen
 dialog.addEventListener('cancel', event => { event.preventDefault(); closeEditor(); });
 dialog.addEventListener('input', () => { dirty = true; });
 dialog.addEventListener('change', () => { dirty = true; });
+document.addEventListener('invalid', event => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }, true);
 document.addEventListener('submit', event => { if ((event.target as HTMLElement).id === 'entity-form') { event.preventDefault(); void saveEditor(event.target as HTMLFormElement).catch(fail); } });
 document.addEventListener('input', event => {
   const el = event.target as HTMLInputElement;
