@@ -1,3 +1,4 @@
+import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
 import { APP_VERSION, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip } from './domain.js';
 import { today, addDays, dateLabel, localDate, toUtc, googleCalendarUrl, makeIcs, conflicts } from './lib/calendar.js';
@@ -88,6 +89,18 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
 }
 async function act(action: string, el: HTMLElement): Promise<void> {
   const id = el.dataset.id || '';
+  if (['google-connect','google-config-save','google-disconnect','google-sync-job'].includes(action)) {
+    if (state.workspace === 'demo') throw new Error('Google nie je dostupný v ukážkovom priestore.');
+    if (action === 'google-config-save') { await saveGoogleClientId(document.querySelector<HTMLInputElement>('#google-client-id')?.value || ''); render(); message('Nastavenie uložené. Kliknite Pripojiť Google účet.'); return; }
+    if (action === 'google-connect') { await connectGoogle(); render(); message('Google pripojený. Vyberte cieľový kalendár.'); return; }
+    if (action === 'google-disconnect') { disconnectGoogle(); render(); message('Relácia odpojená. Udalosti v Google zostali zachované.'); return; }
+    if (dirty) throw new Error('Najskôr uložte zmeny zákazky.');
+    const job = data.jobs.find(j => j.id === id); if (!job) throw new Error('Zákazka sa nenašla.');
+    const done = await syncGoogleJob(job, data.customers.find(c => c.id === job.customerId));
+    if (done) message('Zákazka bola prenesená do Google Kalendára.');
+    return;
+  }
+
   if (action === 'manual-delete' && state.workspace === 'real') return deleteManual(id);
   if (action.startsWith('route-')) { if (dialog.open && !closeEditor()) return; nav(action.slice(6)); return; }
   if (action === 'new-customer') return openEditor('customer');
@@ -163,6 +176,7 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   const el = event.target as HTMLSelectElement;
+  if (el.id === 'google-calendar-select') { try { selectGoogleCalendar(el.value); message('Cieľový kalendár vybraný.'); } catch (error) { fail(error); } }
   if (el.id === 'manual-filter') manualFilter(el.value);
   if (el.id === 'job-filter' || el.id === 'customer-filter') { state.filter = el.value; render(); }
   if (el.id === 'job-customer') {
@@ -188,6 +202,7 @@ async function setupPwa(): Promise<void> {
   } catch { message('Offline inštalácia nie je dostupná; miestne údaje zostávajú zachované.', true); }
 }
 async function init(): Promise<void> {
+  if (googleClientId()) void prepareGoogle().catch(() => {});
   try { data = await load('real'); ready = true; const route = location.hash.slice(1); if (routes.some(r => r[0] === route) || route === 'settings') state.route = route; render(); await setupPwa(); }
   catch (err) { root.innerHTML = `<main class="fatal"><h1>Údaje sa nepodarilo otvoriť</h1><p>${e(err instanceof Error ? err.message : err)}</p><p>Nič sa neprepísalo. Nevymazávajte údaje prehliadača. Skúste aplikáciu otvoriť cez lokálny server alebo podporovaný prehliadač.</p></main>`; }
 }
