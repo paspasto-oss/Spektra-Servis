@@ -17,7 +17,7 @@ export async function load(workspace: Workspace): Promise<Data> {
   return new Promise((resolve, reject) => { const req = db.transaction('workspaces').objectStore('workspaces').get(workspace); req.onsuccess = () => { try { resolve(req.result ? validateData(req.result) : emptyData()); } catch (e) { reject(e); } }; req.onerror = () => reject(req.error); });
 }
 /** Compare-and-swap inside one transaction prevents silently overwriting a second tab. */
-export async function save(workspace: Workspace, value: Data, expectedRevision: number): Promise<Data> {
+export async function save(workspace: Workspace, value: Data, expectedRevision: number, syncMeta?: SyncMeta): Promise<Data> {
   const clean = validateData(value), db = await database();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('workspaces', 'readwrite'), store = tx.objectStore('workspaces'); let problem: Error | undefined;
@@ -26,9 +26,15 @@ export async function save(workspace: Workspace, value: Data, expectedRevision: 
       if ((req.result?.revision ?? 0) !== expectedRevision) { problem = new Error('Údaje zmenila iná karta. Zatvorte formulár, obnovte stránku a úpravu zopakujte.'); tx.abort(); return; }
       clean.revision = expectedRevision + 1;
       store.put(clean, workspace);
+      if(syncMeta){store.put(syncMeta,'sync-meta');}
     };
     tx.oncomplete = () => { try { const channel = new BroadcastChannel(DB_NAME); channel.postMessage({ workspace, revision: clean.revision }); channel.close(); } catch { /* optional browser API */ } resolve(clean); };
     tx.onerror = () => reject(problem || new Error('Uloženie zlyhalo. Skontrolujte voľné miesto. Formulár zostal otvorený.'));
     tx.onabort = () => reject(problem || new Error('Údaje sa neuložili. Formulár zostal otvorený.'));
   });
 }
+
+export interface SyncMeta { owner:string; base:Data; remoteRevision:number; enabled:boolean }
+export async function loadSyncMeta():Promise<SyncMeta|undefined>{const db=await database();return new Promise((resolve,reject)=>{const r=db.transaction('workspaces').objectStore('workspaces').get('sync-meta');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+export async function recoverySnapshot(value:Data):Promise<void>{const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('workspaces','readwrite');tx.objectStore('workspaces').put(value,'before-cloud-link');tx.oncomplete=()=>resolve();tx.onabort=tx.onerror=()=>reject(tx.error);});}
+export async function loadRecovery():Promise<Data|undefined>{const db=await database();return new Promise((resolve,reject)=>{const r=db.transaction('workspaces').objectStore('workspaces').get('before-cloud-link');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}

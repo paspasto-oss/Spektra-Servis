@@ -17,6 +17,7 @@ fs.copyFileSync('node_modules/pdfjs-dist/LICENSE','dist/vendor/PDFJS-LICENSE.txt
 fs.copyFileSync('node_modules/@azure/msal-browser/lib/msal-browser.min.js','dist/vendor/msal-browser.min.js');
 fs.copyFileSync('node_modules/@azure/msal-browser/lib/redirect-bridge/msal-redirect-bridge.min.js','dist/vendor/msal-redirect-bridge.min.js');
 fs.copyFileSync('node_modules/@azure/msal-browser/LICENSE','dist/vendor/MSAL-LICENSE.txt');
+fs.copyFileSync('node_modules/@supabase/supabase-js/dist/umd/supabase.js','dist/vendor/supabase.js');
 const files = walk('dist').map(f=> './'+path.relative('dist',f).replaceAll('\\','/'));
 const hash = crypto.createHash('sha256'); for(const f of walk('dist').sort()) hash.update(fs.readFileSync(f));
 const version = hash.digest('hex').slice(0,14);

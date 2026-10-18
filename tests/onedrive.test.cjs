@@ -1,15 +1,15 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
 const {emptyData}=require('../.build/domain.js');const {importBackup}=require('../.build/lib/backup.js');
 const storage=new Map(),requests=[];let failure=0,authConfig,loginRequest,cleared=0;
-global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
 global.location={origin:'https://spektra-servis.vercel.app'};
 const user={homeAccountId:'personal-account',username:'test@example.test'};
 global.window={msal:{PublicClientApplication:class{constructor(c){authConfig=c;}async initialize(){}async loginPopup(r){loginRequest=r;return {account:user};}async acquireTokenSilent(){return {accessToken:'unit-test-token'};}async clearCache(){cleared++;}}}};
 global.fetch=async(url,init)=>{requests.push({url,init});if(failure)return {ok:false,status:failure};if(url.endsWith('/approot'))return {ok:true,json:async()=>({id:'folder-id',folder:{}})};return {ok:true,json:async()=>({id:'backup-id',name:decodeURIComponent(new URL(url).pathname.split(':/')[1]),size:Buffer.byteLength(init.body)})};};
 const od=require('../.build/lib/onedrive.js');
-test('OneDrive connects through personal-account MSAL with minimal folder scope and memory-only cache',async()=>{
+test('OneDrive connects through personal-account MSAL with minimal folder scope and persistent MSAL cache',async()=>{
  assert.throws(()=>od.validClientId('not-a-client-secret'));await od.saveOneDriveClientId('11111111-1111-4111-8111-111111111111');await od.connectOneDrive();
- assert.equal(authConfig.auth.authority,'https://login.microsoftonline.com/consumers');assert.equal(authConfig.cache.cacheLocation,'memoryStorage');assert.deepEqual(loginRequest.scopes,['https://graph.microsoft.com/Files.ReadWrite.AppFolder']);assert.equal(od.oneDriveState().connected,true);assert.equal(requests[0].url,'https://graph.microsoft.com/v1.0/me/drive/special/approot');
+ assert.equal(authConfig.auth.authority,'https://login.microsoftonline.com/consumers');assert.equal(authConfig.cache.cacheLocation,'localStorage');assert.deepEqual(loginRequest.scopes,['https://graph.microsoft.com/Files.ReadWrite.AppFolder']);assert.equal(od.oneDriveState().connected,true);assert.equal(requests[0].url,'https://graph.microsoft.com/v1.0/me/drive/special/approot');
  assert.ok([...storage.values()].every(v=>!v.includes('unit-test-token')));
 });
 test('upload sends decryptable encrypted data only, requires a password and uses unique filenames',async()=>{
