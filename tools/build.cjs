@@ -10,6 +10,10 @@ function tsc(args) { cp.execFileSync(compiler[0], [...compiler[1], ...args], {st
 tsc(['-p','tsconfig.json']);
 fs.cpSync('public', 'dist', {recursive:true});
 function walk(dir) { return fs.readdirSync(dir, {withFileTypes:true}).flatMap(x => x.isDirectory() ? walk(path.join(dir,x.name)) : [path.join(dir,x.name)]); }
+fs.mkdirSync('dist/vendor', {recursive:true});
+for (const name of ['pdf.mjs','pdf.worker.mjs']) fs.copyFileSync('node_modules/pdfjs-dist/build/'+name,'dist/vendor/'+name);
+for (const dir of ['standard_fonts','cmaps']) fs.cpSync('node_modules/pdfjs-dist/'+dir,'dist/vendor/'+dir,{recursive:true});
+fs.copyFileSync('node_modules/pdfjs-dist/LICENSE','dist/vendor/PDFJS-LICENSE.txt');
 const files = walk('dist').map(f=> './'+path.relative('dist',f).replaceAll('\\','/'));
 const hash = crypto.createHash('sha256'); for(const f of walk('dist').sort()) hash.update(fs.readFileSync(f));
 const version = hash.digest('hex').slice(0,14);

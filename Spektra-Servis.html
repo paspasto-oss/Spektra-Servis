@@ -20,9 +20,12 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 @media(max-width:760px){.mobile-nav .nav-item{min-height:56px}.mobile-nav .nav-item span{font-size:10px;white-space:normal}.heading-actions .btn{min-height:44px}}
 
 .form-intro{color:var(--muted);margin:0 0 18px}.job-section{border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 20px;min-width:0}.job-section legend{font-weight:750;color:var(--red);padding:0 7px}.job-section>.field:last-child{margin-bottom:0}.job-completion{border:1px solid var(--line);border-radius:12px;margin:0 0 12px}.job-completion summary{cursor:pointer;padding:16px;font-weight:700;color:var(--red);min-height:48px}.job-completion summary:focus-visible{outline:3px solid var(--red);outline-offset:2px}.completion-body{padding:0 16px 16px}@media(max-width:760px){.job-section{padding:12px}.completion-body{padding:0 12px 12px}}
+
+.manual-upload{margin:20px 0;border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--paper)}.manual-upload summary{font-weight:700;color:var(--red);cursor:pointer;min-height:32px}.manual-upload form{margin-top:18px}.manual-hit{padding:20px;min-width:0}.manual-hit h3{overflow-wrap:anywhere}.manual-hit pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);line-height:1.6}.manual-results{display:grid;gap:16px}.manual-upload input[type=file]{max-width:100%}#manual-status{overflow-wrap:anywhere}
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const manuals_js_1 = require("./modules/manuals.js");
 const domain_js_1 = require("./domain.js");
 const calendar_js_1 = require("./lib/calendar.js");
 const store_js_1 = require("./lib/store.js");
@@ -63,6 +66,8 @@ function render() {
     root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${(0, ui_js_1.icon)('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${(0, ui_js_1.icon)('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${(0, ui_js_1.e)(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${(0, ui_js_1.e)(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
   <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · žiadne spojenie s RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
+(0, manuals_js_1.setManualRefresh)(() => { if (state.route === 'knowledge')
+    render(); });
 async function commit(next, expected = data.revision) {
     if (busy)
         throw new Error('Počkajte na dokončenie ukladania.');
@@ -151,6 +156,8 @@ async function switchWorkspace(workspace) {
 }
 async function act(action, el) {
     const id = el.dataset.id || '';
+    if (action === 'manual-delete' && state.workspace === 'real')
+        return (0, manuals_js_1.deleteManual)(id);
     if (action.startsWith('route-')) {
         if (dialog.open && !closeEditor())
             return;
@@ -316,7 +323,12 @@ dialog.addEventListener('input', () => { dirty = true; });
 dialog.addEventListener('change', () => { dirty = true; });
 document.addEventListener('invalid', event => { const details = event.target.closest('details'); if (details)
     details.open = true; }, true);
-document.addEventListener('submit', event => { if (event.target.id === 'entity-form') {
+document.addEventListener('submit', event => { if (event.target.id === 'manual-form') {
+    event.preventDefault();
+    if (state.workspace === 'real')
+        void (0, manuals_js_1.uploadManual)(event.target).catch(fail);
+    return;
+} if (event.target.id === 'entity-form') {
     event.preventDefault();
     void saveEditor(event.target).catch(fail);
 } });
@@ -338,6 +350,8 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
     const el = event.target;
+    if (el.id === 'manual-filter')
+        (0, manuals_js_1.manualFilter)(el.value);
     if (el.id === 'job-filter' || el.id === 'customer-filter') {
         state.filter = el.value;
         render();
@@ -681,6 +695,75 @@ function makeIcs(jobs, customers, now = new Date().toISOString()) {
 }
 
 },
+"lib/manual-search.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeManualText = normalizeManualText;
+exports.searchManuals = searchManuals;
+function normalizeManualText(text) {
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b([fes])\s*[.:-]?\s*(\d{2,5})\b/g, '$1$2').replace(/\s+/g, ' ').trim();
+}
+function searchManuals(manuals, query, selected = '') {
+    const words = normalizeManualText(query).split(' ').filter(Boolean);
+    if (!words.length)
+        return [];
+    const hits = [];
+    for (const manual of manuals) {
+        if (selected && manual.id !== selected)
+            continue;
+        for (const page of manual.pages) {
+            const text = normalizeManualText(page.text);
+            // Fault codes are whole tokens: F.022 must not match F.0220.
+            const found = words.map(w => /^[fes]\d+$/.test(w) ? new RegExp('\\b' + w + '\\b').test(text) : text.includes(w));
+            if (!found.every(Boolean))
+                continue;
+            const lines = page.text.split('\n');
+            const line = Math.max(0, lines.findIndex(l => words.some(w => normalizeManualText(l).includes(w))));
+            const excerpt = lines.slice(Math.max(0, line - 1), line + 7).join('\n').slice(0, 1100);
+            hits.push({ manual, page, excerpt, score: text.includes(words.join(' ')) ? 2 : 1 });
+        }
+    }
+    return hits.sort((a, b) => b.score - a.score || a.page.number - b.page.number);
+}
+
+},
+"lib/manual-store.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.listManuals = listManuals;
+exports.writeManual = writeManual;
+async function db() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open('spektra-manuals-v1', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('manuals', { keyPath: 'id' });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(new Error('Úložisko návodov sa nepodarilo otvoriť.'));
+        req.onblocked = () => reject(new Error('Zatvorte ostatné karty aplikácie a skúste znova.'));
+    });
+}
+async function listManuals() {
+    const database = await db();
+    return new Promise((resolve, reject) => {
+        const tx = database.transaction('manuals');
+        const req = tx.objectStore('manuals').getAll();
+        tx.oncomplete = () => { database.close(); resolve(req.result); };
+        tx.onerror = () => { database.close(); reject(new Error('Návody sa nepodarilo načítať.')); };
+    });
+}
+async function writeManual(manual) {
+    const database = await db();
+    return new Promise((resolve, reject) => {
+        const tx = database.transaction('manuals', 'readwrite'), store = tx.objectStore('manuals');
+        if (typeof manual === 'string')
+            store.delete(manual);
+        else
+            store.put(manual);
+        tx.oncomplete = () => { database.close(); resolve(); };
+        tx.onabort = tx.onerror = () => { database.close(); reject(new Error('Návod sa neuložil. Skontrolujte voľné miesto v zariadení.')); };
+    });
+}
+
+},
 "lib/store.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -866,16 +949,143 @@ function jobsPage(data, state) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.knowledgePage = knowledgePage;
+const manuals_js_1 = require("./manuals.js");
 const domain_js_1 = require("../domain.js");
 const ui_js_1 = require("../ui.js");
 const calendar_js_1 = require("../lib/calendar.js");
 function knowledgePage(data, state) {
-    const tabs = [['all', 'Všetko'], ['fault', 'Poruchy a kódy'], ['tip', 'Rady a tipy'], ['regulation', 'Predpisy']];
+    const tabs = [['all', 'Poznatky'], ['manuals', 'Servisné návody PDF'], ['fault', 'Poruchy a kódy'], ['tip', 'Rady a tipy'], ['regulation', 'Predpisy']];
     const tips = data.tips.filter(t => (state.knowledgeTab === 'all' || t.category === state.knowledgeTab) && (0, domain_js_1.matches)([t.title, t.manufacturer, t.model, t.code, t.symptoms, t.solution].join(' '), state.query));
     return (0, ui_js_1.heading)('VLASTNÉ SKÚSENOSTI', 'Knižnica znalostí', 'Čo ste vyriešili dnes, nájdete pri ďalšom servise.', (0, ui_js_1.button)('Pridať poznatok', 'new-tip', 'plus', 'btn primary')) +
-        `<div class="tabs">${tabs.map(([id, label]) => `<button data-action="knowledge-tab" data-tab="${id}" class="${state.knowledgeTab === id ? 'active' : ''}">${label}</button>`).join('')}</div><div class="toolbar">${(0, ui_js_1.searchBox)(state.query, 'Výrobca, model, kód alebo prejav poruchy…')}</div>
+        `<div class="tabs">${tabs.map(([id, label]) => `<button data-action="knowledge-tab" data-tab="${id}" class="${state.knowledgeTab === id ? 'active' : ''}">${label}</button>`).join('')}</div><div class="toolbar">${(0, ui_js_1.searchBox)(state.query, state.knowledgeTab === 'manuals' ? 'Chybový kód alebo slová z návodu…' : 'Výrobca, model, kód alebo prejav poruchy…')}</div>
+  ${state.knowledgeTab === 'manuals' ? (0, manuals_js_1.manualsPage)(state.query, state.workspace === 'demo') : `
   ${state.knowledgeTab === 'regulation' ? `<section class="panel regulation-panel"><div class="square-icon">${(0, ui_js_1.icon)('shield')}</div><div><h2>Plynové skupiny a odborné predpisy</h2><p>Databáza výkladov je pripravená na dopĺňanie. Zatiaľ neurčuje zaradenie zariadenia ani zákonné lehoty. Poznámky overte podľa účinného znenia a svojej odbornej spôsobilosti.</p><a class="btn secondary" href="https://www.slov-lex.sk/ezbierky/pravne-predpisy/SK/ZZ/2009/508/" target="_blank" rel="noopener noreferrer">508/2009 Z. z. na Slov-Lex ${(0, ui_js_1.icon)('external')}</a></div></section>` : ''}
-  <div class="knowledge-grid">${tips.map(t => `<article class="panel tip-card"><div class="tip-head"><span class="tag">${(0, ui_js_1.e)(t.category === 'fault' ? 'Porucha' : t.category === 'regulation' ? 'Predpis' : 'Servisný tip')}</span><span class="verification ${(0, ui_js_1.e)(t.verification)}">${(0, ui_js_1.e)(t.verification === 'draft' ? 'Na preverenie' : t.verification === 'field' ? 'Overené pri zásahu' : 'Podklad výrobcu')}</span></div>${t.code ? `<div class="fault-code">${(0, ui_js_1.e)(t.code)}</div>` : ''}<h2>${(0, ui_js_1.e)(t.title)}</h2><p class="tiny muted">${(0, ui_js_1.e)([t.manufacturer, t.model].filter(Boolean).join(' · ') || 'Všeobecný záznam')}</p><p class="clamp-3">${(0, ui_js_1.e)(t.symptoms || t.solution || 'Doplňte podrobnosti poznatku.')}</p><div class="card-actions"><span class="tiny muted">${t.verifiedAt ? 'Overené ' + (0, ui_js_1.e)((0, calendar_js_1.dateLabel)(t.verifiedAt, { day: 'numeric', month: 'numeric', year: 'numeric' })) : 'Bez overeného postupu'}</span>${(0, ui_js_1.button)('Otvoriť', 'edit-tip', 'arrow', 'btn ghost', `data-id="${(0, ui_js_1.e)(t.id)}"`)}</div></article>`).join('') || (0, ui_js_1.empty)('Vaše skúsenosti majú hodnotu', 'Pridajte prvú vyriešenú poruchu s modelom, príčinou a kontrolou po oprave. Neoverené záznamy sú jasne označené.', (0, ui_js_1.button)('Zapísať prvý poznatok', 'new-tip', 'plus'), 'knowledge')}</div><div class="inline-note">Kód poruchy bez presného modelu nie je diagnóza. Vlastný poznatok nie je univerzálnym pokynom výrobcu ani potvrdením bezpečnosti zariadenia.</div>`;
+  <div class="knowledge-grid">${tips.map(t => `<article class="panel tip-card"><div class="tip-head"><span class="tag">${(0, ui_js_1.e)(t.category === 'fault' ? 'Porucha' : t.category === 'regulation' ? 'Predpis' : 'Servisný tip')}</span><span class="verification ${(0, ui_js_1.e)(t.verification)}">${(0, ui_js_1.e)(t.verification === 'draft' ? 'Na preverenie' : t.verification === 'field' ? 'Overené pri zásahu' : 'Podklad výrobcu')}</span></div>${t.code ? `<div class="fault-code">${(0, ui_js_1.e)(t.code)}</div>` : ''}<h2>${(0, ui_js_1.e)(t.title)}</h2><p class="tiny muted">${(0, ui_js_1.e)([t.manufacturer, t.model].filter(Boolean).join(' · ') || 'Všeobecný záznam')}</p><p class="clamp-3">${(0, ui_js_1.e)(t.symptoms || t.solution || 'Doplňte podrobnosti poznatku.')}</p><div class="card-actions"><span class="tiny muted">${t.verifiedAt ? 'Overené ' + (0, ui_js_1.e)((0, calendar_js_1.dateLabel)(t.verifiedAt, { day: 'numeric', month: 'numeric', year: 'numeric' })) : 'Bez overeného postupu'}</span>${(0, ui_js_1.button)('Otvoriť', 'edit-tip', 'arrow', 'btn ghost', `data-id="${(0, ui_js_1.e)(t.id)}"`)}</div></article>`).join('') || (0, ui_js_1.empty)('Vaše skúsenosti majú hodnotu', 'Pridajte prvú vyriešenú poruchu s modelom, príčinou a kontrolou po oprave. Neoverené záznamy sú jasne označené.', (0, ui_js_1.button)('Zapísať prvý poznatok', 'new-tip', 'plus'), 'knowledge')}</div><div class="inline-note">Kód poruchy bez presného modelu nie je diagnóza. Vlastný poznatok nie je univerzálnym pokynom výrobcu ani potvrdením bezpečnosti zariadenia.</div>`}`;
+}
+
+},
+"modules/manuals.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.setManualRefresh = setManualRefresh;
+exports.refreshManuals = refreshManuals;
+exports.manualsPage = manualsPage;
+exports.manualFilter = manualFilter;
+exports.deleteManual = deleteManual;
+exports.uploadManual = uploadManual;
+const ui_js_1 = require("../ui.js");
+const manual_search_js_1 = require("../lib/manual-search.js");
+const manual_store_js_1 = require("../lib/manual-store.js");
+let manuals = [], status = '', loading = false, loaded = false, filter = '';
+let refresh = () => { };
+const urls = new Map();
+const pdfUrl = (manual) => {
+    let url = urls.get(manual.id);
+    if (!url) {
+        url = URL.createObjectURL(manual.file);
+        urls.set(manual.id, url);
+    }
+    return url;
+};
+function setManualRefresh(fn) { refresh = fn; }
+async function refreshManuals() { manuals = await (0, manual_store_js_1.listManuals)(); loaded = true; }
+function manualsPage(query, demo) {
+    if (demo)
+        return '<div class="inline-note">Návody nahrávajte vo vlastnom pracovnom priestore. Ukážkové údaje sú oddelené.</div>';
+    if (!loaded && !loading) {
+        loading = true;
+        void refreshManuals().catch(err => { status = String(err.message); loaded = true; }).finally(() => { loading = false; refresh(); });
+    }
+    const hits = (0, manual_search_js_1.searchManuals)(manuals, query, filter);
+    return `<div class="inline-note">PDF sa spracúva a uchováva iba v tomto prehliadači. Nie je súčasťou JSON zálohy zákaziek. Originály si ponechajte; na inom zariadení ich nahrajte znova.</div>
+  <details class="manual-upload"><summary>Nahrať servisný návod PDF</summary><form id="manual-form"><div class="form-grid">${(0, ui_js_1.field)('Názov návodu *', 'manualTitle', '', 'text', 'required maxlength="200"')}${(0, ui_js_1.field)('Výrobca *', 'manualManufacturer', '', 'text', 'required maxlength="100"')}${(0, ui_js_1.field)('Model / modelový rad *', 'manualModel', '', 'text', 'required maxlength="200"')}<label class="field"><span>PDF (najviac 50 MB / 600 strán)</span><input type="file" name="manualFile" accept="application/pdf,.pdf" required></label></div><button class="btn primary" type="submit" ${loading ? 'disabled' : ''}>${loading ? 'Spracúvam…' : 'Nahrať a pripraviť vyhľadávanie'}</button></form></details>
+  <p role="status" aria-live="polite" id="manual-status">${(0, ui_js_1.e)(status)}</p>
+  <label class="field"><span>Hľadať v návode pre konkrétny model</span><select id="manual-filter"><option value="">Všetky návody</option>${manuals.map(m => `<option value="${(0, ui_js_1.e)(m.id)}" ${filter === m.id ? 'selected' : ''}>${(0, ui_js_1.e)(m.manufacturer + ' · ' + m.model + ' · ' + m.title)}</option>`).join('')}</select></label>
+  ${query.trim() ? `<p>${hits.length} nájdených strán${hits.length > 50 ? ' · zobrazených prvých 50' : ''}. Vyhľadávanie hľadá všetky zadané slová; zatiaľ nerozumie synonymám.</p><div class="manual-results">${hits.slice(0, 50).map(h => `<article class="panel manual-hit"><span class="tag">${(0, ui_js_1.e)(h.manual.manufacturer)} · ${(0, ui_js_1.e)(h.manual.model)}</span><h3>${(0, ui_js_1.e)(h.manual.title)} — PDF strana ${h.page.number}</h3><pre>${(0, ui_js_1.e)(h.excerpt)}</pre><a class="btn secondary" href="${pdfUrl(h.manual)}#page=${h.page.number}" target="_blank" rel="noopener noreferrer">Otvoriť PDF na strane ${h.page.number}</a></article>`).join('') || '<div class="inline-note">V nahratých návodoch sa nenašla zhoda. Skúste kratší výraz alebo iný model. Riešenie neodhadujeme.</div>'}</div>` : `<div class="knowledge-grid">${manuals.map(m => `<article class="panel manual-hit"><span class="tag">${(0, ui_js_1.e)(m.manufacturer)} · ${(0, ui_js_1.e)(m.model)}</span><h3>${(0, ui_js_1.e)(m.title)}</h3><p>${m.pages.length} strán · ${(m.bytes / 1048576).toFixed(1)} MB</p>${m.blankPages ? `<p>${m.blankPages} strán bez rozpoznaného textu. Na týchto stranách vyhľadávanie nefunguje; môžu vyžadovať OCR.</p>` : ''}<div class="card-actions"><a class="btn secondary" href="${pdfUrl(m)}" download="${(0, ui_js_1.e)(m.filename)}">Stiahnuť PDF</a>${(0, ui_js_1.button)('Odstrániť', 'manual-delete', '', 'btn ghost', `data-id="${(0, ui_js_1.e)(m.id)}"`)}</div></article>`).join('') || '<div class="inline-note">Nahrajte prvý návod. Potom hore zadajte napríklad F.022 alebo nízky tlak.</div>'}</div>`}
+  <p class="tiny muted">Výsledok je úryvok zo zdroja, nie automatická diagnóza. Overte presný model a celý postup v PDF. Číslo PDF strany sa môže líšiť od tlačeného číslovania; niektoré mobilné prehliadače otvoria PDF od začiatku.</p>`;
+}
+function manualFilter(value) { filter = value; refresh(); }
+async function deleteManual(id) {
+    if (loading)
+        throw new Error('Počkajte na dokončenie spracovania.');
+    const manual = manuals.find(m => m.id === id);
+    if (!manual || !confirm('Odstrániť návod „' + manual.title + '“ z tohto zariadenia?'))
+        return;
+    await (0, manual_store_js_1.writeManual)(id);
+    const url = urls.get(id);
+    if (url)
+        URL.revokeObjectURL(url);
+    urls.delete(id);
+    if (filter === id)
+        filter = '';
+    await refreshManuals();
+    refresh();
+}
+async function uploadManual(form) {
+    if (loading)
+        return;
+    if (location.protocol === 'file:')
+        throw new Error('PDF nahrávajte v online aplikácii Spektra Servis.');
+    const fields = new FormData(form), file = fields.get('manualFile');
+    if (!(file instanceof File) || !file.size || file.size > 50 * 1048576)
+        throw new Error('Vyberte PDF do 50 MB.');
+    const title = String(fields.get('manualTitle') || '').trim(), manufacturer = String(fields.get('manualManufacturer') || '').trim(), model = String(fields.get('manualModel') || '').trim();
+    if (!title || !manufacturer || !model)
+        throw new Error('Vyplňte názov, výrobcu a model.');
+    const bytes = await file.arrayBuffer();
+    if (!new TextDecoder().decode(bytes.slice(0, 1024)).includes('%PDF-'))
+        throw new Error('Súbor nemá platnú hlavičku PDF.');
+    loading = true;
+    const submit = form.querySelector('[type=submit]');
+    if (submit)
+        submit.disabled = true;
+    const progress = (text) => { status = text; const el = document.querySelector('#manual-status'); if (el)
+        el.textContent = text; };
+    let task;
+    try {
+        progress('Načítavam PDF…');
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const id = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, '0')).join('');
+        if (manuals.some(m => m.id === id))
+            throw new Error('Tento PDF súbor už v knižnici je.');
+        const moduleUrl = new URL('./vendor/pdf.mjs', location.href).href;
+        const pdfjs = await Promise.resolve(`${moduleUrl}`).then(s => require(s));
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.mjs', location.href).href;
+        task = pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: true, standardFontDataUrl: new URL('./vendor/standard_fonts/', location.href).href, cMapUrl: new URL('./vendor/cmaps/', location.href).href, cMapPacked: true });
+        const pdf = await task.promise;
+        if (pdf.numPages > 600)
+            throw new Error('Návod má viac než 600 strán. Rozdeľte ho na menšie súbory.');
+        const pages = [];
+        let blankPages = 0;
+        for (let number = 1; number <= pdf.numPages; number++) {
+            progress(`Spracúvam stranu ${number} / ${pdf.numPages}…`);
+            const page = await pdf.getPage(number), content = await page.getTextContent();
+            const text = content.items.filter((x) => typeof x.str === 'string').map((x) => x.str + (x.hasEOL ? '\n' : ' ')).join('');
+            if (text.trim().length < 15)
+                blankPages++;
+            pages.push({ number, text });
+            page.cleanup();
+        }
+        if (blankPages === pages.length)
+            throw new Error('PDF nemá vyhľadateľný text. Tento sken potrebuje OCR, ktoré zatiaľ nie je pripojené.');
+        await (0, manual_store_js_1.writeManual)({ id, title, manufacturer, model, pages, blankPages, file, filename: file.name, bytes: file.size, createdAt: new Date().toISOString() });
+        await refreshManuals();
+        filter = id;
+        progress(`Návod uložený. Vyhľadávanie je pripravené v ${pages.length - blankPages} z ${pages.length} strán.`);
+        form.reset();
+    }
+    catch (error) {
+        status = error instanceof Error ? error.message : 'Spracovanie PDF zlyhalo.';
+        throw new Error(status);
+    }
+    finally {
+        if (task)
+            await task.destroy().catch(() => { });
+        loading = false;
+        if (submit)
+            submit.disabled = false;
+        refresh();
+    }
 }
 
 },
@@ -890,7 +1100,7 @@ function settingsPage(data, isDemo) {
     return (0, ui_js_1.heading)('JEDEN TECHNIK · BEZ PAUŠÁLU', 'Nastavenia a zálohy', 'Vaše dáta zostávajú pod vašou kontrolou.') +
         `<div class="settings-grid"><section class="panel settings-panel"><div class="panel-head"><h2>Pracovný profil</h2>${(0, ui_js_1.icon)('customers')}</div><dl class="detail-list"><dt>Technik</dt><dd>${(0, ui_js_1.e)(data.settings.technician)}</dd><dt>Firma</dt><dd>${(0, ui_js_1.e)(data.settings.company)}</dd><dt>Východisko</dt><dd>${(0, ui_js_1.e)(data.settings.baseAddress)}</dd></dl>${(0, ui_js_1.button)('Upraviť profil', 'edit-settings', 'edit')}</section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Bezpečnosť údajov</h2>${(0, ui_js_1.icon)('lock')}</div><p>Táto etapa ukladá údaje do IndexedDB v tomto prehliadači. Nie je pripojená ku cloudu ani k pôvodnej RS2. Nie je to ochrana heslom — používajte uzamknuté zariadenie.</p><p class="notice">Vymazanie údajov prehliadača alebo strata zariadenia môže vymazať archív. Údaje sa automaticky neprenesú do iného telefónu.</p><p class="tiny muted">Počet záznamov: ${counts} · veľkosť textových údajov: ${Math.ceil(new TextEncoder().encode(JSON.stringify(data)).length / 1024)} kB</p>${(0, ui_js_1.button)('Požiadať o trvalé úložisko', 'persist-storage', 'shield')}</section>
-  <section class="panel settings-panel"><div class="panel-head"><h2>Export zálohy</h2>${(0, ui_js_1.icon)('download')}</div><p>Export zahŕňa zákazníkov, zariadenia, zákazky, poradňu a profil. Pre osobné údaje odporúčame šifrovanú zálohu.</p>${(0, ui_js_1.field)('Heslo zálohy (voliteľné)', 'backupPassword', '', 'password', 'id="backup-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez hesla sa exportuje čitateľný JSON. Heslo sa neukladá a nedá sa obnoviť.')}<div class="button-row">${(0, ui_js_1.button)('Stiahnuť zálohu', 'export-backup', 'download', 'btn primary')}</div><p class="tiny muted">Súbor uložte mimo tohto zariadenia na bezpečné miesto.</p></section>
+  <section class="panel settings-panel"><div class="panel-head"><h2>Export zálohy</h2>${(0, ui_js_1.icon)('download')}</div><p>Export zahŕňa zákazníkov, zariadenia, zákazky, servisné poznatky a profil. Nahraté PDF návody tento export neobsahuje; originály si ponechajte alebo stiahnite z knižnice. Pre osobné údaje odporúčame šifrovanú zálohu.</p>${(0, ui_js_1.field)('Heslo zálohy (voliteľné)', 'backupPassword', '', 'password', 'id="backup-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez hesla sa exportuje čitateľný JSON. Heslo sa neukladá a nedá sa obnoviť.')}<div class="button-row">${(0, ui_js_1.button)('Stiahnuť zálohu', 'export-backup', 'download', 'btn primary')}</div><p class="tiny muted">Súbor uložte mimo tohto zariadenia na bezpečné miesto.</p></section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Obnovenie zo zálohy</h2>${(0, ui_js_1.icon)('upload')}</div><p>Pred nahradením údajov sa zobrazí počet záznamov na kontrolu. Bez vášho potvrdenia sa nič nemení.</p>${(0, ui_js_1.field)('Heslo pre obnovenie', 'restorePassword', '', 'password', 'id="restore-password" autocomplete="off"')}<label class="field"><span>Súbor zálohy</span><input type="file" id="restore-file" accept=".json,.spektra,application/json"></label>${(0, ui_js_1.button)('Skontrolovať zálohu', 'preview-backup', 'upload')}</section>
   <section class="panel settings-panel full"><div class="panel-head"><div><h2>Moduly aplikácie</h2><p>Verzia ${domain_js_1.APP_VERSION} · prvá funkčná etapa</p></div><span class="badge done"><i></i>Lokálna verzia</span></div><div class="module-grid">${[['Prehľad a štatistiky', 'Hotové', 'Počty zákaziek a blížiace sa servisy.'], ['Zákazníci a zariadenia', 'Hotové', 'Evidencia, úpravy, archív a história.'], ['Zákazky a kalendár', 'Hotové', 'Termíny, stavy, konflikty, export .ics.'], ['Rady, poruchy a kódy', 'Hotové', 'Vlastné záznamy s označením overenia.'], ['Cloud a Google prihlásenie', 'Ďalšia etapa', 'Samostatný Firebase Spark projekt, pravidlá pre jedného technika.'], ['Google synchronizácia', 'Ďalšia etapa', 'Zatiaľ iba ručné uloženie termínu v Google.'], ['Revízne PDF a podpisy', 'Ďalšia etapa', 'Bez zásahu do existujúcej RS2.'], ['Plynové skupiny a paragrafy', 'Obsah na doplnenie', 'Pripravená kategória; bez automatického právneho výkladu.']].map(([title, state, text]) => `<div class="module-item"><span class="tiny ${state === 'Hotové' ? 'success-text' : 'muted'}">${(0, ui_js_1.e)(state)}</span><h3>${(0, ui_js_1.e)(title)}</h3><p>${(0, ui_js_1.e)(text)}</p></div>`).join('')}</div></section>
   <section class="panel settings-panel full"><h2>Bezplatná prevádzka</h2><p>Aktuálna verzia nemá žiadne cloudové požiadavky, platené API, SMS ani predplatné. Pripravené nasadenie využíva Firebase Hosting Spark; nie App Hosting, Storage ani Functions vyžadujúce platený režim. Online nasadenie zatiaľ nie je aktivované.</p><div class="button-row"><a class="btn ghost" href="https://firebase.google.com/pricing" target="_blank" rel="noopener noreferrer">Overiť limity Firebase ${(0, ui_js_1.icon)('external')}</a>${(0, ui_js_1.button)(isDemo ? 'Opustiť ukážku' : 'Otvoriť ukážkové údaje', isDemo ? 'exit-demo' : 'enter-demo', 'sun')}</div><p class="tiny muted">Ukážkové dáta sú oddelené od vašich skutočných záznamov.</p></section></div>`;

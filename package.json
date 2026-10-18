@@ -9,6 +9,13 @@
     "test": "node tools/build.cjs && node --test tests/*.test.cjs",
     "check": "tsc --noEmit"
   },
-  "devDependencies": { "typescript": "5.8.3" },
-  "engines": { "node": ">=20" }
+  "devDependencies": {
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "pdfjs-dist": "6.4.299"
+  }
 }
