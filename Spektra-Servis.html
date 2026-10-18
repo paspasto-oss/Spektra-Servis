@@ -701,7 +701,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizeManualText = normalizeManualText;
 exports.searchManuals = searchManuals;
 function normalizeManualText(text) {
-    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b([fes])\s*[.:-]?\s*(\d{2,5})\b/g, '$1$2').replace(/\s+/g, ' ').trim();
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b([fes])\s*[.:-]?\s*(\d{1,5})\b/g, (_match, prefix, digits) => prefix + String(Number(digits))).replace(/\s+/g, ' ').trim();
 }
 function searchManuals(manuals, query, selected = '') {
     const words = normalizeManualText(query).split(' ').filter(Boolean);

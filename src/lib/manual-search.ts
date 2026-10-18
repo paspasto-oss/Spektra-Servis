@@ -2,7 +2,7 @@ export interface ManualPage { number: number; text: string }
 export interface ManualIndex { id: string; title: string; manufacturer: string; model: string; pages: ManualPage[]; blankPages: number }
 export interface ManualHit { manual: ManualIndex; page: ManualPage; excerpt: string; score: number }
 export function normalizeManualText(text: string): string {
-  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b([fes])\s*[.:-]?\s*(\d{2,5})\b/g, '$1$2').replace(/\s+/g, ' ').trim();
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b([fes])\s*[.:-]?\s*(\d{1,5})\b/g, (_match, prefix: string, digits: string) => prefix + String(Number(digits))).replace(/\s+/g, ' ').trim();
 }
 export function searchManuals(manuals: ManualIndex[], query: string, selected = ''): ManualHit[] {
   const words = normalizeManualText(query).split(' ').filter(Boolean);
