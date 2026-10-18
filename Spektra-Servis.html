@@ -22,9 +22,20 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 .form-intro{color:var(--muted);margin:0 0 18px}.job-section{border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 20px;min-width:0}.job-section legend{font-weight:750;color:var(--red);padding:0 7px}.job-section>.field:last-child{margin-bottom:0}.job-completion{border:1px solid var(--line);border-radius:12px;margin:0 0 12px}.job-completion summary{cursor:pointer;padding:16px;font-weight:700;color:var(--red);min-height:48px}.job-completion summary:focus-visible{outline:3px solid var(--red);outline-offset:2px}.completion-body{padding:0 16px 16px}@media(max-width:760px){.job-section{padding:12px}.completion-body{padding:0 12px 12px}}
 
 .manual-upload{margin:20px 0;border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--paper)}.manual-upload summary{font-weight:700;color:var(--red);cursor:pointer;min-height:32px}.manual-upload form{margin-top:18px}.manual-hit{padding:20px;min-width:0}.manual-hit h3{overflow-wrap:anywhere}.manual-hit pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);line-height:1.6}.manual-results{display:grid;gap:16px}.manual-upload input[type=file]{max-width:100%}#manual-status{overflow-wrap:anywhere}
+
+/* Shared applications and service costing */
+.commerce-panel { padding:24px; margin-bottom:20px; }
+.stock-row { display:flex; gap:16px; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border,#eee); }
+.stock-row small { display:block; color:#666; margin-top:4px; }
+.cost-results { max-height:240px; overflow:auto; margin:12px 0; }
+.cost-results button { display:block; width:100%; text-align:left; margin:5px 0; }
+#cost-summary { padding:16px; background:#fff1f1; border-radius:12px; }
+@media(max-width:700px) { .commerce-panel { padding:16px; } .stock-row { flex-direction:column; gap:6px; } .mobile-nav { overflow-x:auto; justify-content:flex-start; } .mobile-nav .nav-item { flex:0 0 76px; } }
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const commerce_js_1 = require("./lib/commerce.js");
+const commerce_js_2 = require("./modules/commerce.js");
 const google_calendar_js_1 = require("./lib/google-calendar.js");
 const manuals_js_1 = require("./modules/manuals.js");
 const domain_js_1 = require("./domain.js");
@@ -40,12 +51,13 @@ const knowledge_js_1 = require("./modules/knowledge.js");
 const settings_js_1 = require("./modules/settings.js");
 const editors_js_1 = require("./modules/editors.js");
 const demo_js_1 = require("./demo.js");
-const routes = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge']];
+const routes = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce', 'Ponuky / RS2', 'jobs']];
 let data = (0, domain_js_1.emptyData)(), ready = false, busy = false, editor = null, dirty = false;
 let state = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: (0, calendar_js_1.today)(), month: (0, calendar_js_1.today)().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector('#app');
 const dialog = document.querySelector('#editor');
 const toastElement = document.querySelector('#toast');
+let integrationBusy = false, costJobId = '', costRevision = 0, costLines = [];
 let pendingEditor = null;
 let toastTimer;
 function message(text, error = false) { toastElement.textContent = text; toastElement.className = 'toast visible' + (error ? ' error' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastElement.className = 'toast', error ? 8000 : 4500); }
@@ -62,10 +74,10 @@ function nav(route) { state.route = route; state.query = ''; state.filter = ''; 
 function render() {
     if (!ready)
         return;
-    const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
+    const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
     const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${(0, ui_js_1.icon)(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
     root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${(0, ui_js_1.icon)('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${(0, ui_js_1.icon)('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${(0, ui_js_1.e)(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${(0, ui_js_1.e)(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · žiadne spojenie s RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
 (0, manuals_js_1.setManualRefresh)(() => { if (state.route === 'knowledge')
     render(); });
@@ -157,6 +169,73 @@ async function switchWorkspace(workspace) {
 }
 async function act(action, el) {
     const id = el.dataset.id || '';
+    if (action === 'open-quotes' || action === 'open-rs2') {
+        window.open(commerce_js_1.APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer');
+        return;
+    }
+    if (action === 'import-commerce') {
+        if (state.workspace !== 'real')
+            throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
+        if (integrationBusy)
+            throw Error('Dokončite prebiehajúce prepojenie.');
+        integrationBusy = true;
+        try {
+            const result = await (0, commerce_js_1.openIntegration)('quotes', 'catalog');
+            if (state.workspace !== 'real')
+                throw Error('Pracovný priestor sa zmenil. Prenos zopakujte.');
+            const next = structuredClone(data), count = next.customers.length;
+            next.customers = (0, commerce_js_2.mergeContacts)(next.customers, result.contacts);
+            next.stocks = (0, commerce_js_1.mapStocks)(result.stocks);
+            next.catalogImportedAt = new Date().toISOString();
+            await commit(next);
+            message(`Prenesených ${next.stocks.length} skladových kariet a ${next.customers.length - count} nových kontaktov.`);
+        }
+        finally {
+            integrationBusy = false;
+        }
+        return;
+    }
+    if (action === 'job-quotes' || action === 'job-rs2') {
+        if (dirty)
+            throw Error('Najskôr uložte rozpracované zmeny.');
+        if (state.workspace !== 'real')
+            throw Error('Ukážkové zákazky sa neprenášajú.');
+        const job = data.jobs.find(j => j.id === id);
+        if (!job)
+            throw Error('Zákazka sa nenašla.');
+        await (0, commerce_js_1.openIntegration)(action === 'job-quotes' ? 'quotes' : 'rs2', 'prefill', { job, customer: data.customers.find(c => c.id === job.customerId), device: data.devices.find(d => d.id === job.deviceId) });
+        message('Údaje boli predvyplnené. Dokončite a uložte dokument v otvorenej aplikácii.');
+        return;
+    }
+    if (action === 'cost-job') {
+        if (dirty)
+            throw Error('Najskôr uložte zákazku.');
+        if (!closeEditor())
+            return;
+        costJobId = id;
+        costRevision = data.revision;
+        costLines = structuredClone(data.jobs.find(j => j.id === id)?.costing || []);
+        showCost();
+        return;
+    }
+    if (action === 'cost-add' || action === 'cost-remove' || action === 'cost-labor' || action === 'cost-transport') {
+        costLines = (0, commerce_js_2.readCostRows)(dialog.querySelector('#cost-form'), costLines);
+        if (action === 'cost-remove')
+            costLines.splice(Number(el.dataset.index), 1);
+        else {
+            const stock = (data.stocks || []).find(s => s.id === id);
+            if (action === 'cost-add' && !stock)
+                throw Error('Skladová karta sa nenašla.');
+            costLines.push({ id: crypto.randomUUID(), stockId: stock?.id || '', code: stock?.code || '', name: stock?.name || (action === 'cost-labor' ? 'Servisná práca' : 'Doprava'), unit: stock?.unit || (action === 'cost-labor' ? 'hod' : 'km'), kind: action === 'cost-labor' ? 'labor' : action === 'cost-transport' ? 'transport' : 'material', qty: 1, sale: stock?.sale ?? 0, cost: stock?.cost ?? null, vat: stock?.vat ?? 23 });
+            if (stock?.sale === null)
+                message('Karta nemá predajnú cenu. Doplňte ju pred uložením.', true);
+            if (stock?.vat === null)
+                message('DPH nebola v karte určená. Predvyplnených 23 % skontrolujte.');
+        }
+        dirty = true;
+        showCost();
+        return;
+    }
     if (['google-connect', 'google-config-save', 'google-disconnect', 'google-sync-job'].includes(action)) {
         if (state.workspace === 'demo')
             throw new Error('Google nie je dostupný v ukážkovom priestore.');
@@ -467,6 +546,43 @@ async function init() {
     }
 }
 void init();
+function showCost() {
+    const job = data.jobs.find(j => j.id === costJobId);
+    if (!job)
+        return;
+    dialog.innerHTML = `<form id="cost-form"><div class="modal-head"><h2>Kalkulácia servisu · ${(0, ui_js_1.e)(job.number)}</h2>${(0, ui_js_1.button)('Zavrieť', 'close-editor', '', 'btn ghost')}</div><div class="modal-body"><div id="form-error" class="form-error" hidden></div><p>Ceny za jednotku sú bez DPH. Skontrolujte sadzby a chýbajúce ceny. Uložením sa výsledná suma zapíše do zákazky.</p><label class="field">Vyhľadať materiál v sklade<input id="cost-search" type="search" placeholder="Kód alebo názov materiálu"></label><div id="cost-results" class="cost-results"></div><div class="toolbar">${(0, ui_js_1.button)('Pridať prácu', 'cost-labor', '', 'btn secondary')}${(0, ui_js_1.button)('Pridať dopravu', 'cost-transport', '', 'btn secondary')}</div>${(0, commerce_js_2.costRows)(costLines)}<div id="cost-summary">${(0, commerce_js_2.costSummary)(costLines)}</div></div><div class="modal-footer">${(0, ui_js_1.button)('Zrušiť', 'close-editor', '', 'btn secondary')}<button type="submit" class="btn primary">Uložiť kalkuláciu a cenu</button></div></form>`;
+    if (!dialog.open)
+        dialog.showModal();
+}
+document.addEventListener('input', event => {
+    const input = event.target;
+    if (input.id === 'cost-search') {
+        const q = input.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const rows = q ? (data.stocks || []).filter(s => q.split(/\s+/).every(w => (s.code + ' ' + s.name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(w))).slice(0, 15) : [];
+        const results = document.querySelector('#cost-results');
+        if (results)
+            results.innerHTML = rows.map(s => (0, ui_js_1.button)(s.code + ' · ' + s.name + ' · ' + (0, commerce_js_2.money)(s.sale), 'cost-add', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(s.id)}"`)).join('') || (q ? 'Žiadne položky. Načítajte sklad cez Ponuky / RS2.' : '');
+        return;
+    }
+    const form = input.closest('#cost-form');
+    if (form) {
+        try {
+            const lines = (0, commerce_js_2.readCostRows)(form, costLines);
+            document.querySelector('#cost-summary').innerHTML = (0, commerce_js_2.costSummary)(lines);
+        }
+        catch { /* invalid in-progress input */ }
+    }
+});
+document.addEventListener('submit', event => {
+    const form = event.target;
+    if (form.id !== 'cost-form')
+        return;
+    event.preventDefault();
+    void (async () => { const lines = (0, commerce_js_2.readCostRows)(form, costLines); if (!lines.length)
+        throw Error('Pridajte aspoň jednu položku.'); if (lines.some(l => !l.name.trim()))
+        throw Error('Vyplňte názov každej položky.'); const next = structuredClone(data), job = next.jobs.find(j => j.id === costJobId); if (!job)
+        throw Error('Zákazka sa nenašla.'); job.costing = lines; job.amount = (0, commerce_js_1.totals)(lines).gross; job.updatedAt = new Date().toISOString(); job.version++; await commit(next, costRevision); dirty = false; closeEditor(); message('Kalkulácia aj konečná cena sú uložené.'); })().catch(fail);
+});
 
 },
 "demo.js":function(require,module,exports){
@@ -499,7 +615,7 @@ exports.emptyData = emptyData;
 exports.nextNumber = nextNumber;
 exports.safeUrl = safeUrl;
 exports.validateData = validateData;
-/** Data contracts for the isolated, single-technician workspace. No RS2 connection. */
+const commerce_js_1 = require("./lib/commerce.js");
 exports.APP_VERSION = '0.1.0';
 exports.ZONE = 'Europe/Bratislava';
 exports.KINDS = { servis: 'Servis', revizia: 'Revízia', obhliadka: 'Obhliadka', montaz: 'Montáž' };
@@ -551,10 +667,10 @@ function validateData(input) {
     const data = {
         schemaVersion: 1, revision: num(root.revision, 'verzia dát', 0, Number.MAX_SAFE_INTEGER),
         settings: { technician: str(settings.technician, 'technik', 160), company: str(settings.company, 'firma', 200), baseAddress: str(settings.baseAddress, 'adresa', 400) },
-        lastBackup: str(root.lastBackup, 'čas zálohy', 40),
+        lastBackup: str(root.lastBackup, 'čas zálohy', 40), ...(root.stocks === undefined ? {} : { stocks: (0, commerce_js_1.validateStocks)(root.stocks) }), ...(root.catalogImportedAt === undefined ? {} : { catalogImportedAt: str(root.catalogImportedAt, 'čas importu', 40) }),
         customers: arr(root.customers, 'zákazníci', o => ({ ...base(o), name: str(o.name, 'meno', 160), company: str(o.company, 'firma', 200), phone: str(o.phone, 'telefón', 60), email: str(o.email, 'e-mail', 200), address: str(o.address, 'adresa', 400), notes: str(o.notes, 'poznámka'), archived: bool(o.archived, 'archív zákazníka') })),
         devices: arr(root.devices, 'zariadenia', o => ({ ...base(o), customerId: str(o.customerId, 'zákazník', 80), type: choice(o.type, Object.keys(exports.DEVICE_TYPES), 'typ zariadenia'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), serial: str(o.serial, 'výrobné číslo', 160), location: str(o.location, 'umiestnenie', 400), nextService: date(o.nextService, 'ďalší servis'), notes: str(o.notes, 'poznámka'), archived: bool(o.archived, 'archív zariadenia') })),
-        jobs: arr(root.jobs, 'zákazky', o => ({ ...base(o), number: str(o.number, 'číslo zákazky', 40), customerId: str(o.customerId, 'zákazník', 80), deviceId: str(o.deviceId, 'zariadenie', 80), title: str(o.title, 'názov', 200), kind: choice(o.kind, Object.keys(exports.KINDS), 'druh práce'), status: choice(o.status, Object.keys(exports.STATUSES), 'stav zákazky'), start: str(o.start, 'začiatok', 40), duration: num(o.duration, 'dĺžka', 5, 1440), address: str(o.address, 'adresa', 400), issue: str(o.issue, 'problém'), resolution: str(o.resolution, 'riešenie'), result: choice(o.result, ['pending', 'ok', 'fail'], 'technický výsledok'), payment: choice(o.payment, ['unpaid', 'paid'], 'úhrada'), amount: o.amount === null ? null : num(o.amount, 'suma', 0, 1000000), version: num(o.version, 'verzia udalosti', 0, Number.MAX_SAFE_INTEGER) })),
+        jobs: arr(root.jobs, 'zákazky', o => ({ ...base(o), ...(o.costing === undefined ? {} : { costing: (0, commerce_js_1.validateLines)(o.costing) }), number: str(o.number, 'číslo zákazky', 40), customerId: str(o.customerId, 'zákazník', 80), deviceId: str(o.deviceId, 'zariadenie', 80), title: str(o.title, 'názov', 200), kind: choice(o.kind, Object.keys(exports.KINDS), 'druh práce'), status: choice(o.status, Object.keys(exports.STATUSES), 'stav zákazky'), start: str(o.start, 'začiatok', 40), duration: num(o.duration, 'dĺžka', 5, 1440), address: str(o.address, 'adresa', 400), issue: str(o.issue, 'problém'), resolution: str(o.resolution, 'riešenie'), result: choice(o.result, ['pending', 'ok', 'fail'], 'technický výsledok'), payment: choice(o.payment, ['unpaid', 'paid'], 'úhrada'), amount: o.amount === null ? null : num(o.amount, 'suma', 0, 1000000), version: num(o.version, 'verzia udalosti', 0, Number.MAX_SAFE_INTEGER) })),
         tips: arr(root.tips, 'poradňa', o => ({ ...base(o), title: str(o.title, 'názov', 200), category: choice(o.category, ['fault', 'tip', 'regulation'], 'kategória rady'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), code: str(o.code, 'kód', 80), symptoms: str(o.symptoms, 'prejav'), solution: str(o.solution, 'riešenie'), source: str(o.source, 'zdroj', 2000), verification: choice(o.verification, ['draft', 'field', 'manufacturer'], 'overenie'), verifiedAt: date(o.verifiedAt, 'dátum overenia'), jobId: str(o.jobId, 'odkaz na zákazku', 80) }))
     };
     if (!Number.isInteger(data.revision))
@@ -735,6 +851,93 @@ function makeIcs(jobs, customers, now = new Date().toISOString()) {
     }
     lines.push('END:VCALENDAR');
     return lines.map(fold).join('\r\n') + '\r\n';
+}
+
+},
+"lib/commerce.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.APPS = void 0;
+exports.validateStocks = validateStocks;
+exports.mapStocks = mapStocks;
+exports.validateLines = validateLines;
+exports.totals = totals;
+exports.openIntegration = openIntegration;
+const text = (v, max = 400) => { if (typeof v !== 'string' || v.length > max)
+    throw Error('Neplatný text položky.'); return v; };
+const num = (v, max = 1000000) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max)
+    throw Error('Neplatná cena alebo množstvo.'); return v; };
+const optional = (v) => v === null || v === undefined || v === '' ? null : num(Number(v));
+function validateStocks(value) {
+    if (!Array.isArray(value) || value.length > 20000)
+        throw Error('Neplatný sklad.');
+    const rows = value.map((s) => ({ id: text(s.id, 100), code: text(s.code), name: text(s.name), unit: text(s.unit, 40), sale: s.sale === null ? null : num(s.sale), cost: s.cost === null ? null : num(s.cost), vat: s.vat === null ? null : num(s.vat, 100), available: s.available === null ? null : (typeof s.available === 'number' && Number.isFinite(s.available) && Math.abs(s.available) <= 1000000 ? s.available : (() => { throw Error('Neplatný stav skladu.'); })()), syncedAt: text(s.syncedAt, 40) }));
+    if (rows.some(s => !s.id || !s.name) || new Set(rows.map(s => s.id)).size !== rows.length)
+        throw Error('Sklad obsahuje chýbajúce alebo duplicitné karty.');
+    return rows;
+}
+function mapStocks(value) {
+    if (!Array.isArray(value))
+        throw Error('Chýba zoznam skladu.');
+    return validateStocks(value.filter(s => s.active !== false).map(s => { const sale = optional(s.sell_price_ex_vat), gross = optional(s.sell_price_inc_vat); const rate = sale !== null && sale >= 1 && gross !== null ? Math.round((gross / sale - 1) * 100) : null; return { id: String(s.id || s.fingerprint || ''), code: String(s.code || s.plu || ''), name: String(s.name || ''), unit: String(s.unit || 'ks'), sale, cost: optional(s.purchase_price_ex_vat), vat: rate !== null && rate >= 0 && rate <= 100 ? rate : null, available: s.quantity_available == null ? null : Number(s.quantity_available), syncedAt: String(s.synced_at || '') }; }));
+}
+function validateLines(value) {
+    if (!Array.isArray(value) || value.length > 500)
+        throw Error('Neplatná kalkulácia.');
+    return value.map(s => { if (!['material', 'labor', 'transport'].includes(s.kind))
+        throw Error('Neplatný druh položky.'); return { id: text(s.id, 100), stockId: text(s.stockId, 100), code: text(s.code), name: text(s.name), unit: text(s.unit, 40), kind: s.kind, qty: num(s.qty), sale: num(s.sale), cost: s.cost === null ? null : num(s.cost), vat: num(s.vat, 100) }; });
+}
+// Match Cenové ponuky: quantity at 3 decimals, price at 4 decimals;
+// round net once per VAT rate and VAT from that rounded net.
+function totals(lines) {
+    const groups = new Map();
+    let costs = 0n;
+    for (const l of lines) {
+        const qty = BigInt(Math.round(l.qty * 1000));
+        groups.set(l.vat, (groups.get(l.vat) || 0n) + BigInt(Math.round(l.sale * 10000)) * qty);
+        costs += BigInt(Math.round((l.cost ?? 0) * 10000)) * qty;
+    }
+    let net = 0n, vat = 0n;
+    for (const [rate, scaled] of groups) {
+        const n = (scaled + 50000n) / 100000n;
+        net += n;
+        vat += (n * BigInt(Math.round(rate * 100)) + 5000n) / 10000n;
+    }
+    const cost = (costs + 50000n) / 100000n, known = lines.every(l => l.cost !== null);
+    return { net: Number(net) / 100, vat: Number(vat) / 100, gross: Number(net + vat) / 100, cost: known ? Number(cost) / 100 : null, profit: known ? Number(net - cost) / 100 : null };
+}
+exports.APPS = { quotes: 'https://cenov-ponuky.vercel.app/mobile-v4/app.html', rs2: 'https://rs-2-peach.vercel.app/' };
+function openIntegration(target, operation, payload) {
+    const nonce = crypto.randomUUID(), url = new URL(exports.APPS[target]);
+    url.searchParams.set('spektraBridge', nonce);
+    const popup = window.open(url.href, 'spektra-' + nonce, 'popup=false');
+    if (!popup)
+        return Promise.reject(Error('Povoľte otvorenie nového okna pre prepojenie aplikácií.'));
+    return new Promise((resolve, reject) => {
+        let sent = false;
+        const cleanup = () => { clearTimeout(timeout); clearInterval(poll); window.removeEventListener('message', receive); };
+        const timeout = setTimeout(() => { cleanup(); reject(Error('Prepojenie vypršalo. Prihláste sa v otvorenej aplikácii a skúste prenos znova.')); }, 300000);
+        const poll = setInterval(() => { if (popup.closed) {
+            cleanup();
+            reject(Error('Okno prepojenia bolo zatvorené.'));
+        } }, 1000);
+        function receive(event) {
+            if (event.origin !== url.origin || event.source !== popup || event.data?.nonce !== nonce)
+                return;
+            if (event.data.type === 'spektra-ready' && !sent) {
+                sent = true;
+                popup.postMessage({ type: 'spektra-request', nonce, operation, payload }, url.origin);
+            }
+            if (event.data.type === 'spektra-result') {
+                cleanup();
+                if (event.data.error)
+                    reject(Error(String(event.data.error)));
+                else
+                    resolve(event.data.payload);
+            }
+        }
+        window.addEventListener('message', receive);
+    });
 }
 
 },
@@ -1066,6 +1269,49 @@ function calendarPage(data, state) {
 }
 
 },
+"modules/commerce.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.money = void 0;
+exports.commercePage = commercePage;
+exports.mergeContacts = mergeContacts;
+exports.costSummary = costSummary;
+exports.costRows = costRows;
+exports.readCostRows = readCostRows;
+const domain_js_1 = require("../domain.js");
+const commerce_js_1 = require("../lib/commerce.js");
+const ui_js_1 = require("../ui.js");
+const money = (n) => n === null ? 'Neznáme' : n.toLocaleString('sk-SK', { style: 'currency', currency: 'EUR' });
+exports.money = money;
+function commercePage(data, query) {
+    const stock = data.stocks || [], words = (0, domain_js_1.normalize)(query).split(/\s+/).filter(Boolean), list = stock.filter(s => words.every(w => (0, domain_js_1.normalize)(s.code + ' ' + s.name).includes(w)));
+    return (0, ui_js_1.heading)('PREPOJENÉ APLIKÁCIE', 'Ponuky, RS2 a sklad', 'Existujúce aplikácie a materiál pre servisné zákazky.') + `<section class="panel commerce-panel"><div class="toolbar">${(0, ui_js_1.button)('Cenové ponuky', 'open-quotes', '', 'btn primary')}${(0, ui_js_1.button)('RS2 – revízne správy', 'open-rs2', '', 'btn secondary')}${(0, ui_js_1.button)('Načítať adresár a sklad z Ponúk', 'import-commerce', '', 'btn secondary')}</div><p>Otvorí sa aplikácia Cenové ponuky. Prihláste sa svojím existujúcim účtom a potvrďte prenos. Kontakty sa doplnia bez prepísania existujúcich kariet. Sklad sa obnoví ako celok.</p><p class="tiny muted">${stock.length} skladových kariet · Posledný prenos: ${(0, ui_js_1.e)(data.catalogImportedAt ? new Date(data.catalogImportedAt).toLocaleString('sk-SK') : 'zatiaľ neprebehol')}. Kópia zostáva v tomto zariadení a je súčasťou zálohy.</p></section><section class="panel commerce-panel"><h2>Sklad POHODA</h2>${(0, ui_js_1.searchBox)(query, 'Kód alebo názov materiálu…')}<p>${list.length} výsledkov, zobrazených najviac 30. Materiál pridáte cez Kalkuláciu servisu v uloženej zákazke.</p>${list.slice(0, 30).map(s => `<div class="stock-row"><div><strong>${(0, ui_js_1.e)(s.code)} · ${(0, ui_js_1.e)(s.name)}</strong><small>${(0, ui_js_1.e)(s.unit)} · sklad: ${s.available ?? 'neznámy'}</small></div><div>${(0, exports.money)(s.sale)}<small>predaj bez DPH · nákup ${(0, exports.money)(s.cost)}</small></div></div>`).join('')}</section>`;
+}
+function mergeContacts(existing, input) {
+    if (!Array.isArray(input) || input.length > 20000)
+        throw Error('Neplatný adresár.');
+    const clean = (v, max) => { if (v == null)
+        return ''; if (typeof v !== 'string' || v.length > max)
+        throw Error('Neplatné údaje kontaktu.'); return v.trim(); };
+    const key = (c) => [(0, domain_js_1.normalize)(c.name), (0, domain_js_1.normalize)(c.company), c.phone.replace(/\D/g, ''), (0, domain_js_1.normalize)(c.email), (0, domain_js_1.normalize)(c.address)].join('|');
+    const result = [...existing], seen = new Set(existing.map(key));
+    for (const row of input) {
+        const c = { ...(0, domain_js_1.stamp)(), name: clean(row.name, 160), company: clean(row.company, 200), phone: clean(row.phone, 60), email: clean(row.email, 200), address: clean(row.address, 400), notes: 'Import z Cenových ponúk', archived: false };
+        if (!c.name && !c.company)
+            continue;
+        const k = key(c);
+        if (!seen.has(k)) {
+            result.push(c);
+            seen.add(k);
+        }
+    }
+    return result;
+}
+function costSummary(lines) { const t = (0, commerce_js_1.totals)(lines); return `<strong>Bez DPH ${(0, exports.money)(t.net)} · DPH ${(0, exports.money)(t.vat)} · Spolu ${(0, exports.money)(t.gross)}</strong><p class="tiny">Interný nákup ${(0, exports.money)(t.cost)} · Rozdiel predaj − nákup ${(0, exports.money)(t.profit)} (pred ostatnými nákladmi)</p>`; }
+function costRows(lines) { return lines.map((l, i) => `<fieldset class="job-section cost-row" data-line="${i}"><legend>${(0, ui_js_1.e)(l.code || 'Vlastná položka')} · ${(0, ui_js_1.e)(l.kind === 'material' ? 'Materiál' : l.kind === 'labor' ? 'Práca' : 'Doprava')}</legend><label class="field">Druh<select name="kind-${i}">${[['material', 'Materiál'], ['labor', 'Práca'], ['transport', 'Doprava']].map(([k, label]) => `<option value="${k}" ${k === l.kind ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Názov<input name="name-${i}" value="${(0, ui_js_1.e)(l.name)}" required maxlength="400"></label><div class="form-grid"><label class="field">Množstvo (${(0, ui_js_1.e)(l.unit)})<input name="qty-${i}" type="number" min="0" max="1000000" step="0.001" value="${l.qty}" required></label><label class="field">Predaj / jednotka bez DPH<input name="sale-${i}" type="number" min="0" max="1000000" step="0.0001" value="${l.sale}" required></label><label class="field">Nákup / jednotka bez DPH<input name="cost-${i}" type="number" min="0" max="1000000" step="0.0001" value="${l.cost ?? ''}" placeholder="Neznáme"></label><label class="field">DPH %<input name="vat-${i}" type="number" min="0" max="100" step="0.01" value="${l.vat}" required></label></div>${(0, ui_js_1.button)('Odstrániť položku', 'cost-remove', '', 'btn ghost', `data-index="${i}"`)}</fieldset>`).join(''); }
+function readCostRows(form, lines) { const f = new FormData(form); return (0, commerce_js_1.validateLines)(lines.map((l, i) => ({ ...l, kind: String(f.get('kind-' + i) || l.kind), name: String(f.get('name-' + i) || ''), qty: Number(f.get('qty-' + i)), sale: Number(f.get('sale-' + i)), cost: f.get('cost-' + i) === '' ? null : Number(f.get('cost-' + i)), vat: Number(f.get('vat-' + i)) }))); }
+
+},
 "modules/customers.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -1112,6 +1358,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deviceOptions = deviceOptions;
 exports.editorContent = editorContent;
 const domain_js_1 = require("../domain.js");
+const commerce_js_1 = require("./commerce.js");
 const calendar_js_1 = require("../lib/calendar.js");
 const ui_js_1 = require("../ui.js");
 function deviceOptions(data, customerId, selected = '') {
@@ -1140,7 +1387,7 @@ function editorContent(editor, data) {
         title = j ? j.number + ' · detail zákazky' : 'Nová zákazka';
         content = `<p class="form-intro">Vyplňte zákazníka a zadanie. Termín môžete doplniť neskôr.</p><fieldset class="job-section"><legend>1. Zákazník a zariadenie</legend>${(0, ui_js_1.select)('Zákazník *', 'customerId', cId, customerOptions(cId), 'required id="job-customer"')}<label class="field"><span>Zariadenie</span><select name="deviceId" id="job-device">${deviceOptions(data, cId, deviceId)}</select></label>${(0, ui_js_1.field)('Adresa výjazdu', 'address', j?.address || device?.location || customer?.address || '')}</fieldset><fieldset class="job-section"><legend>2. Zadanie zákazky</legend>${(0, ui_js_1.field)('Názov zákazky *', 'title', j?.title || (device ? 'Servis — ' + (0, domain_js_1.deviceName)(device) : ''), 'text', 'required')}${(0, ui_js_1.area)('Zadanie / prejav poruchy', 'issue', j?.issue)}<div class="form-grid">${(0, ui_js_1.select)('Druh práce', 'kind', j?.kind || 'servis', Object.entries(domain_js_1.KINDS))}${(0, ui_js_1.select)('Stav zákazky', 'status', j?.status || (editor.day ? 'planned' : 'new'), Object.entries(domain_js_1.STATUSES))}</div></fieldset><fieldset class="job-section"><legend>3. Termín výjazdu</legend><p class="tiny muted">Bez termínu zostane zákazka v zozname na naplánovanie.</p><div class="form-grid">${(0, ui_js_1.field)('Začiatok výjazdu', 'start', j?.start ? (0, calendar_js_1.localDate)(j.start) : editor.day ? editor.day + 'T09:00' : '', 'datetime-local', '', 'Časové pásmo Europe/Bratislava.')}${(0, ui_js_1.field)('Trvanie v minútach *', 'duration', String(j?.duration || 60), 'number', 'required min="5" max="1440" step="1"')}</div></fieldset><details class="job-completion" ${j ? 'open' : ''}><summary>4. Dokončenie servisu a úhrada</summary><div class="completion-body">${(0, ui_js_1.area)('Vykonaný zásah / riešenie', 'resolution', j?.resolution)}<div class="form-grid">${(0, ui_js_1.select)('Technický výsledok', 'result', j?.result || 'pending', [['pending', 'Kontrola nedokončená'], ['ok', 'Vyhovuje (potvrdil technik)'], ['fail', 'Nevyhovuje (potvrdil technik)']])}${(0, ui_js_1.select)('Úhrada', 'payment', j?.payment || 'unpaid', [['unpaid', 'Neuhradené'], ['paid', 'Uhradené (ručné potvrdenie)']])}${(0, ui_js_1.field)('Dohodnutá konečná suma (€)', 'amount', j?.amount === null || j?.amount === undefined ? '' : String(j.amount), 'number', 'min="0" max="1000000" step="0.01"')}</div><div class="inline-note">Dokončenie zákazky nemení technický výsledok ani úhradu. Táto karta nie je revízna správa.</div></div></details>`;
         if (j)
-            tools = `${j.start ? (0, ui_js_1.button)('Synchronizovať s Google', 'google-sync-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Pridať do Google (ručne)', 'google-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Do Google sa prenesie uložená verzia zákazky. Pred prenosom uložte úpravy. Pripomienku nastavte po uložení v Google.</p>`;
+            tools = `${(0, ui_js_1.button)('Kalkulácia servisu', 'cost-job', '', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Cenová ponuka', 'job-quotes', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Správa RS2', 'job-rs2', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${j.costing?.length ? '<div>' + (0, commerce_js_1.costSummary)(j.costing) + '</div>' : ''}${j.start ? (0, ui_js_1.button)('Synchronizovať s Google', 'google-sync-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Pridať do Google (ručne)', 'google-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Do Google sa prenesie uložená verzia zákazky. Pred prenosom uložte úpravy. Pripomienku nastavte po uložení v Google.</p>`;
     }
     if (editor.type === 'tip') {
         const t = data.tips.find(x => x.id === editor.id), job = data.jobs.find(j => j.id === editor.sourceJobId), d = data.devices.find(d => d.id === job?.deviceId);

@@ -21,3 +21,12 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 .form-intro{color:var(--muted);margin:0 0 18px}.job-section{border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 20px;min-width:0}.job-section legend{font-weight:750;color:var(--red);padding:0 7px}.job-section>.field:last-child{margin-bottom:0}.job-completion{border:1px solid var(--line);border-radius:12px;margin:0 0 12px}.job-completion summary{cursor:pointer;padding:16px;font-weight:700;color:var(--red);min-height:48px}.job-completion summary:focus-visible{outline:3px solid var(--red);outline-offset:2px}.completion-body{padding:0 16px 16px}@media(max-width:760px){.job-section{padding:12px}.completion-body{padding:0 12px 12px}}
 
 .manual-upload{margin:20px 0;border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--paper)}.manual-upload summary{font-weight:700;color:var(--red);cursor:pointer;min-height:32px}.manual-upload form{margin-top:18px}.manual-hit{padding:20px;min-width:0}.manual-hit h3{overflow-wrap:anywhere}.manual-hit pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);line-height:1.6}.manual-results{display:grid;gap:16px}.manual-upload input[type=file]{max-width:100%}#manual-status{overflow-wrap:anywhere}
+
+/* Shared applications and service costing */
+.commerce-panel { padding:24px; margin-bottom:20px; }
+.stock-row { display:flex; gap:16px; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border,#eee); }
+.stock-row small { display:block; color:#666; margin-top:4px; }
+.cost-results { max-height:240px; overflow:auto; margin:12px 0; }
+.cost-results button { display:block; width:100%; text-align:left; margin:5px 0; }
+#cost-summary { padding:16px; background:#fff1f1; border-radius:12px; }
+@media(max-width:700px) { .commerce-panel { padding:16px; } .stock-row { flex-direction:column; gap:6px; } .mobile-nav { overflow-x:auto; justify-content:flex-start; } .mobile-nav .nav-item { flex:0 0 76px; } }

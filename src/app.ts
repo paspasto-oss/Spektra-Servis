@@ -1,3 +1,5 @@
+import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/commerce.js';
+import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
 import { APP_VERSION, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip } from './domain.js';
@@ -14,12 +16,13 @@ import { settingsPage } from './modules/settings.js';
 import { editorContent, deviceOptions, type Editor, type EditorType } from './modules/editors.js';
 import { demoData } from './demo.js';
 
-const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge']];
+const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Ponuky / RS2','jobs']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
 let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
+let integrationBusy=false, costJobId='', costRevision=0, costLines:CostLine[]=[];
 let pendingEditor: { type: EditorType; extra: Partial<Editor> } | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
 function message(text: string, error = false): void { toastElement.textContent = text; toastElement.className = 'toast visible' + (error ? ' error' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastElement.className = 'toast', error ? 8000 : 4500); }
@@ -27,10 +30,10 @@ function fail(err: unknown): void { const text = err instanceof Error ? err.mess
 function nav(route: string): void { state.route = route; state.query = ''; state.filter = ''; if (route !== 'jobs') state.selectedCustomer = ''; location.hash = route; render(); window.scrollTo({ top: 0 }); }
 function render(): void {
   if (!ready) return;
-  const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), knowledge: () => knowledgePage(data, state), settings: () => settingsPage(data, state.workspace === 'demo') };
+  const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), settings: () => settingsPage(data, state.workspace === 'demo') };
   const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
   root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${icon('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${icon('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${e(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${e(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · žiadne spojenie s RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>Údaje sú zatiaľ len v tomto prehliadači. Cloud nie je pripojený.</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
 setManualRefresh(() => { if (state.route === 'knowledge') render(); });
 async function commit(next: Data, expected = data.revision): Promise<void> {
@@ -89,6 +92,36 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
 }
 async function act(action: string, el: HTMLElement): Promise<void> {
   const id = el.dataset.id || '';
+  if (action === 'open-quotes' || action === 'open-rs2') { window.open(APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer'); return; }
+  if (action === 'import-commerce') {
+    if (state.workspace !== 'real') throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
+    if (integrationBusy) throw Error('Dokončite prebiehajúce prepojenie.');
+    integrationBusy=true;
+    try {
+      const result=await openIntegration('quotes','catalog') as {contacts:unknown;stocks:unknown};
+      if(state.workspace!=='real') throw Error('Pracovný priestor sa zmenil. Prenos zopakujte.');
+      const next=structuredClone(data), count=next.customers.length;
+      next.customers=mergeContacts(next.customers,result.contacts); next.stocks=mapStocks(result.stocks);next.catalogImportedAt=new Date().toISOString();
+      await commit(next);message(`Prenesených ${next.stocks.length} skladových kariet a ${next.customers.length-count} nových kontaktov.`);
+    } finally {integrationBusy=false;} return;
+  }
+  if(action==='job-quotes'||action==='job-rs2') {
+    if(dirty)throw Error('Najskôr uložte rozpracované zmeny.');
+    if(state.workspace!=='real')throw Error('Ukážkové zákazky sa neprenášajú.');
+    const job=data.jobs.find(j=>j.id===id);if(!job)throw Error('Zákazka sa nenašla.');
+    await openIntegration(action==='job-quotes'?'quotes':'rs2','prefill',{job,customer:data.customers.find(c=>c.id===job.customerId),device:data.devices.find(d=>d.id===job.deviceId)});
+    message('Údaje boli predvyplnené. Dokončite a uložte dokument v otvorenej aplikácii.');return;
+  }
+  if(action==='cost-job') {if(dirty)throw Error('Najskôr uložte zákazku.');if(!closeEditor())return;costJobId=id;costRevision=data.revision;costLines=structuredClone(data.jobs.find(j=>j.id===id)?.costing||[]);showCost();return;}
+  if(action==='cost-add'||action==='cost-remove'||action==='cost-labor'||action==='cost-transport') {
+    costLines=readCostRows(dialog.querySelector<HTMLFormElement>('#cost-form')!,costLines);
+    if(action==='cost-remove')costLines.splice(Number(el.dataset.index),1);
+    else {const stock=(data.stocks||[]).find(s=>s.id===id);if(action==='cost-add'&&!stock)throw Error('Skladová karta sa nenašla.');
+      costLines.push({id:crypto.randomUUID(),stockId:stock?.id||'',code:stock?.code||'',name:stock?.name||(action==='cost-labor'?'Servisná práca':'Doprava'),unit:stock?.unit||(action==='cost-labor'?'hod':'km'),kind:action==='cost-labor'?'labor':action==='cost-transport'?'transport':'material',qty:1,sale:stock?.sale??0,cost:stock?.cost??null,vat:stock?.vat??23});
+      if(stock?.sale===null)message('Karta nemá predajnú cenu. Doplňte ju pred uložením.',true);
+      if(stock?.vat===null)message('DPH nebola v karte určená. Predvyplnených 23 % skontrolujte.');
+    }dirty=true;showCost();return;
+  }
   if (['google-connect','google-config-save','google-disconnect','google-sync-job'].includes(action)) {
     if (state.workspace === 'demo') throw new Error('Google nie je dostupný v ukážkovom priestore.');
     if (action === 'google-config-save') { await saveGoogleClientId(document.querySelector<HTMLInputElement>('#google-client-id')?.value || ''); render(); message('Nastavenie uložené. Kliknite Pripojiť Google účet.'); return; }
@@ -207,3 +240,18 @@ async function init(): Promise<void> {
   catch (err) { root.innerHTML = `<main class="fatal"><h1>Údaje sa nepodarilo otvoriť</h1><p>${e(err instanceof Error ? err.message : err)}</p><p>Nič sa neprepísalo. Nevymazávajte údaje prehliadača. Skúste aplikáciu otvoriť cez lokálny server alebo podporovaný prehliadač.</p></main>`; }
 }
 void init();
+
+function showCost():void {
+ const job=data.jobs.find(j=>j.id===costJobId);if(!job)return;
+ dialog.innerHTML=`<form id="cost-form"><div class="modal-head"><h2>Kalkulácia servisu · ${e(job.number)}</h2>${button('Zavrieť','close-editor','','btn ghost')}</div><div class="modal-body"><div id="form-error" class="form-error" hidden></div><p>Ceny za jednotku sú bez DPH. Skontrolujte sadzby a chýbajúce ceny. Uložením sa výsledná suma zapíše do zákazky.</p><label class="field">Vyhľadať materiál v sklade<input id="cost-search" type="search" placeholder="Kód alebo názov materiálu"></label><div id="cost-results" class="cost-results"></div><div class="toolbar">${button('Pridať prácu','cost-labor','','btn secondary')}${button('Pridať dopravu','cost-transport','','btn secondary')}</div>${costRows(costLines)}<div id="cost-summary">${costSummary(costLines)}</div></div><div class="modal-footer">${button('Zrušiť','close-editor','','btn secondary')}<button type="submit" class="btn primary">Uložiť kalkuláciu a cenu</button></div></form>`;
+ if(!dialog.open)dialog.showModal();
+}
+document.addEventListener('input',event=>{
+ const input=event.target as HTMLInputElement;
+ if(input.id==='cost-search') {const q=input.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();const rows=q?(data.stocks||[]).filter(s=>q.split(/\s+/).every(w=>(s.code+' '+s.name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(w))).slice(0,15):[];const results=document.querySelector('#cost-results');if(results)results.innerHTML=rows.map(s=>button(s.code+' · '+s.name+' · '+money(s.sale),'cost-add','','btn secondary',`data-id="${e(s.id)}"`)).join('')||(q?'Žiadne položky. Načítajte sklad cez Ponuky / RS2.':'');return;}
+ const form=input.closest<HTMLFormElement>('#cost-form');if(form){try{const lines=readCostRows(form,costLines);document.querySelector('#cost-summary')!.innerHTML=costSummary(lines);}catch{/* invalid in-progress input */}}
+});
+document.addEventListener('submit',event=>{
+ const form=event.target as HTMLFormElement;if(form.id!=='cost-form')return;event.preventDefault();
+ void (async()=>{const lines=readCostRows(form,costLines);if(!lines.length)throw Error('Pridajte aspoň jednu položku.');if(lines.some(l=>!l.name.trim()))throw Error('Vyplňte názov každej položky.');const next=structuredClone(data),job=next.jobs.find(j=>j.id===costJobId);if(!job)throw Error('Zákazka sa nenašla.');job.costing=lines;job.amount=totals(lines).gross;job.updatedAt=new Date().toISOString();job.version++;await commit(next,costRevision);dirty=false;closeEditor();message('Kalkulácia aj konečná cena sú uložené.');})().catch(fail);
+});
