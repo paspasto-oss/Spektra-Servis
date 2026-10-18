@@ -12,12 +12,13 @@ import { settingsPage } from './modules/settings.js';
 import { editorContent, deviceOptions, type Editor, type EditorType } from './modules/editors.js';
 import { demoData } from './demo.js';
 
-const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Zákazníci', 'customers'], ['knowledge', 'Poradňa', 'knowledge']];
+const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
 let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
+let pendingEditor: { type: EditorType; extra: Partial<Editor> } | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
 function message(text: string, error = false): void { toastElement.textContent = text; toastElement.className = 'toast visible' + (error ? ' error' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastElement.className = 'toast', error ? 8000 : 4500); }
 function fail(err: unknown): void { const text = err instanceof Error ? err.message : 'Operácia sa nepodarila.'; if (dialog.open) { const el = dialog.querySelector<HTMLElement>('#form-error'); if (el) { el.textContent = text; el.hidden = false; el.scrollIntoView({ block: 'nearest' }); } } message(text, true); }
@@ -35,10 +36,10 @@ async function commit(next: Data, expected = data.revision): Promise<void> {
   try { const clean = await save(state.workspace, next, expected); data = clean; render(); } finally { busy = false; if (submit) submit.disabled = false; }
 }
 function canClose(): boolean { return !busy && (!dirty || confirm('Zahodiť neuložené zmeny vo formulári?')); }
-function closeEditor(): boolean { if (!canClose()) return false; dialog.close(); editor = null; dirty = false; return true; }
+function closeEditor(): boolean { if (!canClose()) return false; dialog.close(); editor = null; pendingEditor = null; dirty = false; return true; }
 function openEditor(type: EditorType, id = '', extra: Partial<Editor> = {}): void {
   if (dialog.open && !closeEditor()) return;
-  if ((type === 'job' || type === 'device') && !data.customers.some(c => !c.archived) && !id) { message('Najprv pridajte zákazníka. Potom mu priradíte zariadenie alebo zákazku.'); type = 'customer'; }
+  if ((type === 'job' || type === 'device') && !data.customers.some(c => !c.archived) && !id) { pendingEditor = { type, extra }; message('Najprv uložte zákazníka. Potom pokračujeme v rozpracovanom formulári.'); type = 'customer'; }
   editor = { type, id, revision: data.revision, ...extra }; dirty = false;
   const view = editorContent(editor, data);
   dialog.innerHTML = `<form id="entity-form"><div class="modal-head"><div><span class="eyebrow">SPEKTRA SERVIS</span><h2 id="editor-title">${e(view.title)}</h2></div><button type="button" class="icon-btn" data-action="close-editor" aria-label="Zavrieť formulár">${icon('close')}</button></div><div class="modal-body"><div id="form-error" class="form-error" role="alert" hidden></div>${view.content}${view.tools ? '<div class="editor-tools">' + view.tools + '</div>' : ''}</div><div class="modal-footer"><span class="tiny muted">Uloženie iba v tomto zariadení</span>${button('Zrušiť', 'close-editor', '', 'btn secondary')}<button class="btn primary" type="submit">${icon('check')}<span>Uložiť</span></button></div></form>`;
@@ -72,7 +73,10 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
     next.tips = old ? next.tips.map(x => x.id === old.id ? row : x) : [...next.tips, row];
   }
   if (editor.type === 'settings') next.settings = { technician: s('technician'), company: s('company'), baseAddress: s('baseAddress') };
+  const continuation = editor.type === 'customer' ? pendingEditor : null;
+  const newCustomerId = continuation ? next.customers[next.customers.length - 1]?.id : undefined;
   await commit(validateData(next), editor.revision); dirty = false; closeEditor(); message('Uložené v zariadení.');
+  if (continuation && newCustomerId) openEditor(continuation.type, '', { ...continuation.extra, customerId: newCustomerId });
 }
 async function switchWorkspace(workspace: Workspace): Promise<void> {
   if (dialog.open && !closeEditor()) return;

@@ -66,11 +66,15 @@ with sync_playwright() as pw:
     page.wait_for_selector('.stats')
     assert page.locator('.stat strong').all_text_contents()==['0','0','0','0']
     page.screenshot(path=str(ROOT.parent/'spektra-real-desktop.png'),full_page=True)
-    page.locator('[data-action="new-customer"]').first.click()
+    page.locator('[data-action="new-job"]').first.click()
     page.locator('input[name="name"]').fill('Testovací zákazník <img src=x onerror=alert(1)>')
     page.locator('input[name="address"]').fill('Testovacia adresa, Rajec')
     page.locator('input[name="phone"]').fill('+421 900 000 000')
     page.locator('#entity-form button[type="submit"]').click()
+    page.wait_for_selector('#job-customer')
+    assert page.locator('#job-customer').input_value()
+    assert page.locator('input[name="address"]').input_value()=='Testovacia adresa, Rajec'
+    page.locator('[data-action="close-editor"]').first.click()
     page.wait_for_function('!document.querySelector("#editor").open')
     page.locator('.sidebar [data-action="route-customers"]').click()
     assert page.locator('.customer-card').count()==1
