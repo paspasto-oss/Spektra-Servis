@@ -25,7 +25,7 @@ import { demoData } from './demo.js';
 
 const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Ponuky / RS2','jobs'],['files','Súbory / OneDrive','upload']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
-let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
+let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'week', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;

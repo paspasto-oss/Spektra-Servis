@@ -30,3 +30,18 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 .cost-results button { display:block; width:100%; text-align:left; margin:5px 0; }
 #cost-summary { padding:16px; background:#fff1f1; border-radius:12px; }
 @media(max-width:700px) { .commerce-panel { padding:16px; } .stock-row { flex-direction:column; gap:6px; } .mobile-nav { overflow-x:auto; justify-content:flex-start; } .mobile-nav .nav-item { flex:0 0 76px; } }
+
+/* Time-proportional weekly service calendar. */
+.google-calendar{grid-template-columns:minmax(0,1fr)}
+.time-calendar{overflow:auto;max-height:72vh;border-top:1px solid #dadce0;background:white;overscroll-behavior:contain}
+.time-week{min-width:900px}.time-head,.time-body{display:grid;grid-template-columns:58px repeat(7,minmax(0,1fr))}
+.time-head{position:sticky;top:0;z-index:3;background:white;border-bottom:1px solid #dadce0;align-items:center}
+.time-head>span{font-size:11px;text-align:center;color:#70757a}.time-head button{border:0;border-left:1px solid #eee;background:white;padding:10px 3px;color:#5f6368;display:grid;justify-items:center;gap:5px}
+.time-head small{font-size:12px}.time-head b{font-size:22px;font-weight:500;width:38px;height:38px;border-radius:50%;display:grid;place-items:center}.time-head .is-today b{background:#1a73e8;color:white}.time-head .is-selected{background:#e8f0fe}
+.time-axis{position:relative;background:white;z-index:1}.time-axis span{position:absolute;right:7px;font-size:10px;color:#70757a;line-height:16px}
+.time-day{position:relative;border-left:1px solid #dadce0;background:repeating-linear-gradient(to bottom,transparent 0,transparent 35px,#f1f3f4 35px,#f1f3f4 36px,transparent 36px,transparent 71px,#dadce0 71px,#dadce0 72px)}
+.time-day.is-today{background-color:#f8fbff}.time-event{position:absolute;border:1px solid white;border-radius:6px;text-align:left;padding:3px 5px;color:white;overflow:hidden;display:flex;flex-direction:column;gap:2px;line-height:1.25;min-width:0;cursor:pointer;font-size:11px;z-index:2}
+.time-event strong{font-size:12px}.time-event span,.time-event strong{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0;width:100%}.time-event:hover{filter:brightness(.92)}.time-event:focus-visible{z-index:4;outline:3px solid #202124;outline-offset:1px}.short-event{padding:0 4px;gap:0}.short-event strong{font-size:10px}
+.event-servis{background:#1967d2}.event-revizia{background:#137333}.event-obhliadka{background:#8430a6}.event-montaz{background:#b45309}
+.time-legend{padding:14px 20px;display:flex;gap:16px;flex-wrap:wrap;color:#5f6368;font-size:12px}.time-legend span{display:flex;align-items:center;gap:6px}.time-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+@media(max-width:760px){.time-week{min-width:840px}.time-calendar{max-height:65vh}.time-legend{gap:10px;font-size:11px}.google-calendar .calendar-toolbar{padding:12px}}
