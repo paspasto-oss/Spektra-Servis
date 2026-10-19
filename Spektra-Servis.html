@@ -48,6 +48,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 @media(max-width:760px){.time-week{min-width:840px}.time-calendar{max-height:65vh}.time-legend{gap:10px;font-size:11px}.google-calendar .calendar-toolbar{padding:12px}}
 
 .time-slot{position:absolute;left:0;width:100%;height:36px;border:0;background:transparent;cursor:pointer;padding:0;border-radius:0}.time-slot:hover{background:#e8f0fe}.time-slot:focus-visible{background:#d2e3fc;outline:2px solid #1a73e8;outline-offset:-2px}
+
+.customer-suggestions{display:grid;gap:4px;margin-bottom:10px}.customer-suggestions button{text-align:left;background:#f3f6fc;border:1px solid #dbe3ef;border-radius:8px;padding:10px;min-height:44px}.customer-suggestions small{display:block;color:#586574;margin-top:4px}#customer-hint{margin-bottom:14px}
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -133,7 +135,7 @@ function closeEditor() { if (!canClose())
 function openEditor(type, id = '', extra = {}) {
     if (dialog.open && !closeEditor())
         return;
-    if ((type === 'job' || type === 'device') && !data.customers.some(c => !c.archived) && !id) {
+    if ((type === 'device') && !data.customers.some(c => !c.archived) && !id) {
         pendingEditor = { type, extra };
         message('Najprv uložte zákazníka. Potom pokračujeme v rozpracovanom formulári.');
         type = 'customer';
@@ -165,7 +167,15 @@ async function saveEditor(form) {
     }
     if (editor.type === 'job') {
         const old = data.jobs.find(x => x.id === editor.id), start = s('start') ? (0, calendar_js_1.toUtc)(s('start')) : '';
-        const row = { ...(old || common), updatedAt: now, number: old?.number || (0, domain_js_1.nextNumber)(data, (0, calendar_js_1.today)().slice(0, 4)), customerId: s('customerId'), deviceId: s('deviceId'), title: s('title'), kind: s('kind'), status: s('status'), start, duration: Number(s('duration')), address: s('address'), issue: s('issue'), resolution: s('resolution'), result: s('result'), payment: s('payment'), amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
+        let customerId = s('customerId');
+        if (!customerId) {
+            if (!s('customerName'))
+                throw new Error('Zadajte meno zákazníka alebo názov firmy.');
+            const customer = { ...(0, domain_js_1.stamp)(), name: s('customerName'), company: '', phone: s('customerPhone'), email: s('customerEmail'), address: s('address'), notes: '', archived: false };
+            next.customers.push(customer);
+            customerId = customer.id;
+        }
+        const row = { ...(old || common), updatedAt: now, number: old?.number || (0, domain_js_1.nextNumber)(data, (0, calendar_js_1.today)().slice(0, 4)), customerId, deviceId: s('deviceId'), title: s('title'), kind: s('kind'), status: s('status'), start, duration: Number(s('duration')), address: s('address'), issue: s('issue'), resolution: s('resolution'), result: s('result'), payment: s('payment'), amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
         const overlap = (0, calendar_js_1.conflicts)(row, data.jobs);
         if (overlap.length && !confirm('Termín sa prekrýva so zákazkou ' + overlap.map(j => j.number).join(', ') + '. Uložiť aj napriek prekryvu?'))
             return;
@@ -198,6 +208,24 @@ async function switchWorkspace(workspace) {
     nav('home');
 }
 async function act(action, el) {
+    if (action === 'choose-job-customer') {
+        const c = data.customers.find(c => c.id === el.dataset.id && !c.archived);
+        if (!c)
+            return;
+        dialog.querySelector('#job-customer').value = c.id;
+        dialog.querySelector('#job-customer-name').value = c.name || c.company;
+        dialog.querySelector('#customer-suggestions').innerHTML = '';
+        dialog.querySelector('#new-customer-fields').hidden = true;
+        for (const input of dialog.querySelectorAll('#new-customer-fields input')) {
+            input.value = '';
+            input.disabled = true;
+        }
+        dialog.querySelector('#customer-hint').textContent = 'Vybraný uložený kontakt: ' + (c.phone || c.address || c.name || c.company);
+        dialog.querySelector('#job-device').innerHTML = (0, editors_js_1.deviceOptions)(data, c.id);
+        dialog.querySelector('[name=address]').value = c.address;
+        dirty = true;
+        return;
+    }
     const id = el.dataset.id || '';
     if (syncBusy)
         throw Error('Práve prebieha synchronizácia, skúste o chvíľu.');
@@ -540,6 +568,20 @@ document.addEventListener('submit', event => { if (event.target.id === 'manual-f
 } });
 document.addEventListener('input', event => {
     const el = event.target;
+    if (el.id === 'job-customer-name') {
+        const selected = dialog.querySelector('#job-customer');
+        if (selected.value) {
+            dialog.querySelector('[name=address]').value = '';
+        }
+        selected.value = '';
+        dialog.querySelector('#job-device').innerHTML = (0, editors_js_1.deviceOptions)(data, '');
+        dialog.querySelector('#new-customer-fields').hidden = false;
+        for (const input of dialog.querySelectorAll('#new-customer-fields input'))
+            input.disabled = false;
+        const found = el.value.trim() ? data.customers.filter(c => !c.archived && (0, domain_js_1.matches)([c.name, c.company, c.phone, c.address].join(' '), el.value)).slice(0, 8) : [];
+        dialog.querySelector('#customer-suggestions').innerHTML = found.map(c => `<button type="button" data-action="choose-job-customer" data-id="${(0, ui_js_1.e)(c.id)}"><strong>${(0, ui_js_1.e)(c.name || c.company)}</strong><small>${(0, ui_js_1.e)([c.phone, c.address].filter(Boolean).join(' · '))}</small></button>`).join('');
+        dialog.querySelector('#customer-hint').textContent = found.length ? 'Vyberte uložený kontakt alebo pokračujte ako nový zákazník.' : 'Nový kontakt sa uloží spolu s výjazdom.';
+    }
     if (el.id === 'page-search') {
         const pos = el.selectionStart;
         state.query = el.value;
@@ -2135,7 +2177,7 @@ function editorContent(editor, data) {
         const j = data.jobs.find(x => x.id === editor.id), cId = j?.customerId || editor.customerId || '', deviceId = j?.deviceId || editor.deviceId || '';
         const customer = data.customers.find(c => c.id === cId), device = data.devices.find(d => d.id === deviceId);
         title = j ? j.number + ' · detail zákazky' : editor.day ? 'Naplánovať výjazd' : 'Nová zákazka';
-        content = `<p class="form-intro">Vyplňte zákazníka a zadanie. Termín môžete doplniť neskôr.</p><fieldset class="job-section"><legend>1. Zákazník a zariadenie</legend>${(0, ui_js_1.select)('Zákazník *', 'customerId', cId, customerOptions(cId), 'required id="job-customer"')}<label class="field"><span>Zariadenie</span><select name="deviceId" id="job-device">${deviceOptions(data, cId, deviceId)}</select></label>${(0, ui_js_1.field)('Adresa výjazdu', 'address', j?.address || device?.location || customer?.address || '')}</fieldset><fieldset class="job-section"><legend>2. Zadanie zákazky</legend>${(0, ui_js_1.field)('Názov zákazky *', 'title', j?.title || (device ? 'Servis — ' + (0, domain_js_1.deviceName)(device) : ''), 'text', 'required')}${(0, ui_js_1.area)('Zadanie / prejav poruchy', 'issue', j?.issue)}<div class="form-grid">${(0, ui_js_1.select)('Druh práce', 'kind', j?.kind || 'servis', Object.entries(domain_js_1.KINDS))}${(0, ui_js_1.select)('Stav zákazky', 'status', j?.status || (editor.day ? 'planned' : 'new'), Object.entries(domain_js_1.STATUSES))}</div></fieldset><fieldset class="job-section"><legend>3. Termín výjazdu</legend><p class="tiny muted">Bez termínu zostane zákazka v zozname na naplánovanie.</p><div class="form-grid">${(0, ui_js_1.field)('Začiatok výjazdu', 'start', j?.start ? (0, calendar_js_1.localDate)(j.start) : editor.day ? editor.day + 'T' + (editor.time || '09:00') : '', 'datetime-local', '', 'Časové pásmo Europe/Bratislava.')}${(0, ui_js_1.field)('Trvanie v minútach *', 'duration', String(j?.duration || 60), 'number', 'required min="5" max="1440" step="1"')}</div></fieldset><details class="job-completion" ${j ? 'open' : ''}><summary>4. Dokončenie servisu a úhrada</summary><div class="completion-body">${(0, ui_js_1.area)('Vykonaný zásah / riešenie', 'resolution', j?.resolution)}<div class="form-grid">${(0, ui_js_1.select)('Technický výsledok', 'result', j?.result || 'pending', [['pending', 'Kontrola nedokončená'], ['ok', 'Vyhovuje (potvrdil technik)'], ['fail', 'Nevyhovuje (potvrdil technik)']])}${(0, ui_js_1.select)('Úhrada', 'payment', j?.payment || 'unpaid', [['unpaid', 'Neuhradené'], ['paid', 'Uhradené (ručné potvrdenie)']])}${(0, ui_js_1.field)('Dohodnutá konečná suma (€)', 'amount', j?.amount === null || j?.amount === undefined ? '' : String(j.amount), 'number', 'min="0" max="1000000" step="0.01"')}</div><div class="inline-note">Dokončenie zákazky nemení technický výsledok ani úhradu. Táto karta nie je revízna správa.</div></div></details>`;
+        content = `<p class="form-intro">Vyplňte zákazníka a zadanie. Termín môžete doplniť neskôr.</p><fieldset class="job-section"><legend>1. Zákazník a zariadenie</legend><input type="hidden" name="customerId" id="job-customer" value="${(0, ui_js_1.e)(cId)}">${(0, ui_js_1.field)('Meno zákazníka / firma *', 'customerName', customer?.name || customer?.company || '', 'text', 'required id="job-customer-name" autocomplete="off" aria-describedby="customer-hint"')}<div id="customer-suggestions" class="customer-suggestions"></div><p id="customer-hint" class="tiny muted">${cId ? 'Vybraný uložený kontakt.' : 'Napíšte meno a vyberte kontakt z ponuky, alebo doplňte nový kontakt.'}</p><div id="new-customer-fields" ${cId ? 'hidden' : ''}>${(0, ui_js_1.field)('Telefón', 'customerPhone', '', 'tel')}${(0, ui_js_1.field)('E-mail', 'customerEmail', '', 'email')}<p class="tiny muted">Nový kontakt sa uloží do adresára spolu s výjazdom. Použije sa adresa výjazdu.</p></div><label class="field"><span>Zariadenie</span><select name="deviceId" id="job-device">${deviceOptions(data, cId, deviceId)}</select></label>${(0, ui_js_1.field)('Adresa výjazdu', 'address', j?.address || device?.location || customer?.address || '')}</fieldset><fieldset class="job-section"><legend>2. Zadanie zákazky</legend>${(0, ui_js_1.field)('Názov zákazky *', 'title', j?.title || (device ? 'Servis — ' + (0, domain_js_1.deviceName)(device) : ''), 'text', 'required')}${(0, ui_js_1.area)('Zadanie / prejav poruchy', 'issue', j?.issue)}<div class="form-grid">${(0, ui_js_1.select)('Druh práce', 'kind', j?.kind || 'servis', Object.entries(domain_js_1.KINDS))}${(0, ui_js_1.select)('Stav zákazky', 'status', j?.status || (editor.day ? 'planned' : 'new'), Object.entries(domain_js_1.STATUSES))}</div></fieldset><fieldset class="job-section"><legend>3. Termín výjazdu</legend><p class="tiny muted">Bez termínu zostane zákazka v zozname na naplánovanie.</p><div class="form-grid">${(0, ui_js_1.field)('Začiatok výjazdu', 'start', j?.start ? (0, calendar_js_1.localDate)(j.start) : editor.day ? editor.day + 'T' + (editor.time || '09:00') : '', 'datetime-local', '', 'Časové pásmo Europe/Bratislava.')}${(0, ui_js_1.field)('Trvanie v minútach *', 'duration', String(j?.duration || 60), 'number', 'required min="5" max="1440" step="1"')}</div></fieldset><details class="job-completion" ${j ? 'open' : ''}><summary>4. Dokončenie servisu a úhrada</summary><div class="completion-body">${(0, ui_js_1.area)('Vykonaný zásah / riešenie', 'resolution', j?.resolution)}<div class="form-grid">${(0, ui_js_1.select)('Technický výsledok', 'result', j?.result || 'pending', [['pending', 'Kontrola nedokončená'], ['ok', 'Vyhovuje (potvrdil technik)'], ['fail', 'Nevyhovuje (potvrdil technik)']])}${(0, ui_js_1.select)('Úhrada', 'payment', j?.payment || 'unpaid', [['unpaid', 'Neuhradené'], ['paid', 'Uhradené (ručné potvrdenie)']])}${(0, ui_js_1.field)('Dohodnutá konečná suma (€)', 'amount', j?.amount === null || j?.amount === undefined ? '' : String(j.amount), 'number', 'min="0" max="1000000" step="0.01"')}</div><div class="inline-note">Dokončenie zákazky nemení technický výsledok ani úhradu. Táto karta nie je revízna správa.</div></div></details>`;
         if (j)
             tools = `${(0, ui_js_1.button)('PDF a fotografie', 'job-files', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Kalkulácia servisu', 'cost-job', '', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Cenová ponuka', 'job-quotes', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Správa RS2', 'job-rs2', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${j.costing?.length ? '<div>' + (0, commerce_js_1.costSummary)(j.costing) + '</div>' : ''}${j.start ? (0, ui_js_1.button)('Synchronizovať s Google', 'google-sync-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Pridať do Google (ručne)', 'google-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Do Google sa prenesie uložená verzia zákazky. Pred prenosom uložte úpravy. Pripomienku nastavte po uložení v Google.</p>`;
     }

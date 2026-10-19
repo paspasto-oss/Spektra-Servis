@@ -9,7 +9,7 @@ import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/c
 import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
-import { APP_VERSION, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip } from './domain.js';
+import { APP_VERSION, matches, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip } from './domain.js';
 import { today, addDays, dateLabel, localDate, toUtc, googleCalendarUrl, makeIcs, conflicts } from './lib/calendar.js';
 import { load, save, type Workspace } from './lib/store.js';
 import { download, exportBackup, importBackup } from './lib/backup.js';
@@ -54,7 +54,7 @@ function canClose(): boolean { return !busy && (!dirty || confirm('Zahodiť neul
 function closeEditor(): boolean { if (!canClose()) return false; dialog.close(); editor = null; pendingEditor = null; dirty = false; return true; }
 function openEditor(type: EditorType, id = '', extra: Partial<Editor> = {}): void {
   if (dialog.open && !closeEditor()) return;
-  if ((type === 'job' || type === 'device') && !data.customers.some(c => !c.archived) && !id) { pendingEditor = { type, extra }; message('Najprv uložte zákazníka. Potom pokračujeme v rozpracovanom formulári.'); type = 'customer'; }
+  if ((type === 'device') && !data.customers.some(c => !c.archived) && !id) { pendingEditor = { type, extra }; message('Najprv uložte zákazníka. Potom pokračujeme v rozpracovanom formulári.'); type = 'customer'; }
   editor = { type, id, revision: data.revision, ...extra }; dirty = false;
   const view = editorContent(editor, data);
   dialog.innerHTML = `<form id="entity-form"><div class="modal-head"><div><span class="eyebrow">SPEKTRA SERVIS</span><h2 id="editor-title">${e(view.title)}</h2></div><button type="button" class="icon-btn" data-action="close-editor" aria-label="Zavrieť formulár">${icon('close')}</button></div><div class="modal-body"><div id="form-error" class="form-error" role="alert" hidden></div>${view.content}${view.tools ? '<div class="editor-tools">' + view.tools + '</div>' : ''}</div><div class="modal-footer"><span class="tiny muted">Uloženie iba v tomto zariadení</span>${button('Zrušiť', 'close-editor', '', 'btn secondary')}<button class="btn primary" type="submit">${icon('check')}<span>Uložiť</span></button></div></form>`;
@@ -78,7 +78,13 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   }
   if (editor.type === 'job') {
     const old = data.jobs.find(x => x.id === editor!.id), start = s('start') ? toUtc(s('start')) : '';
-    const row: Job = { ...(old || common), updatedAt: now, number: old?.number || nextNumber(data, today().slice(0, 4)), customerId: s('customerId'), deviceId: s('deviceId'), title: s('title'), kind: s('kind') as Job['kind'], status: s('status') as Job['status'], start, duration: Number(s('duration')), address: s('address'), issue: s('issue'), resolution: s('resolution'), result: s('result') as Job['result'], payment: s('payment') as Job['payment'], amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
+    let customerId = s('customerId');
+    if (!customerId) {
+      if (!s('customerName')) throw new Error('Zadajte meno zákazníka alebo názov firmy.');
+      const customer: Customer = { ...stamp(), name:s('customerName'), company:'', phone:s('customerPhone'), email:s('customerEmail'), address:s('address'), notes:'', archived:false };
+      next.customers.push(customer); customerId=customer.id;
+    }
+    const row: Job = { ...(old || common), updatedAt: now, number: old?.number || nextNumber(data, today().slice(0, 4)), customerId, deviceId: s('deviceId'), title: s('title'), kind: s('kind') as Job['kind'], status: s('status') as Job['status'], start, duration: Number(s('duration')), address: s('address'), issue: s('issue'), resolution: s('resolution'), result: s('result') as Job['result'], payment: s('payment') as Job['payment'], amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
     const overlap = conflicts(row, data.jobs); if (overlap.length && !confirm('Termín sa prekrýva so zákazkou ' + overlap.map(j => j.number).join(', ') + '. Uložiť aj napriek prekryvu?')) return;
     next.jobs = old ? next.jobs.map(x => x.id === old.id ? row : x) : [...next.jobs, row];
   }
@@ -101,6 +107,18 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
   state = { ...state, workspace, selectedCustomer: '', query: '', filter: '' }; nav('home');
 }
 async function act(action: string, el: HTMLElement): Promise<void> {
+  if (action === 'choose-job-customer') {
+    const c = data.customers.find(c => c.id === el.dataset.id && !c.archived); if (!c) return;
+    dialog.querySelector<HTMLInputElement>('#job-customer')!.value=c.id;
+    dialog.querySelector<HTMLInputElement>('#job-customer-name')!.value=c.name || c.company;
+    dialog.querySelector<HTMLElement>('#customer-suggestions')!.innerHTML='';
+    dialog.querySelector<HTMLElement>('#new-customer-fields')!.hidden=true;
+    for (const input of dialog.querySelectorAll<HTMLInputElement>('#new-customer-fields input')) { input.value=''; input.disabled=true; }
+    dialog.querySelector<HTMLElement>('#customer-hint')!.textContent='Vybraný uložený kontakt: '+(c.phone || c.address || c.name || c.company);
+    dialog.querySelector<HTMLSelectElement>('#job-device')!.innerHTML=deviceOptions(data,c.id);
+    dialog.querySelector<HTMLInputElement>('[name=address]')!.value=c.address;
+    dirty=true; return;
+  }
   const id = el.dataset.id || '';
   if(syncBusy)throw Error('Práve prebieha synchronizácia, skúste o chvíľu.');
   if(action==='job-files'){if(dirty)throw Error('Najskôr uložte zákazku.');if(!closeEditor())return;nav('files');const select=document.querySelector<HTMLSelectElement>('#attachment-form select');if(select)select.value=id;return;}
@@ -242,6 +260,17 @@ document.addEventListener('invalid', event => { const details = (event.target as
 document.addEventListener('submit', event => { if ((event.target as HTMLElement).id === 'manual-form') { event.preventDefault(); if (state.workspace === 'real') void uploadManual(event.target as HTMLFormElement).then(()=>enqueueManuals()).catch(fail); return; } if ((event.target as HTMLElement).id === 'entity-form') { event.preventDefault(); void saveEditor(event.target as HTMLFormElement).catch(fail); } });
 document.addEventListener('input', event => {
   const el = event.target as HTMLInputElement;
+  if (el.id === 'job-customer-name') {
+    const selected=dialog.querySelector<HTMLInputElement>('#job-customer')!;
+    if (selected.value) { dialog.querySelector<HTMLInputElement>('[name=address]')!.value=''; }
+    selected.value='';
+    dialog.querySelector<HTMLSelectElement>('#job-device')!.innerHTML=deviceOptions(data,'');
+    dialog.querySelector<HTMLElement>('#new-customer-fields')!.hidden=false;
+    for(const input of dialog.querySelectorAll<HTMLInputElement>('#new-customer-fields input')) input.disabled=false;
+    const found=el.value.trim() ? data.customers.filter(c=>!c.archived && matches([c.name,c.company,c.phone,c.address].join(' '),el.value)).slice(0,8) : [];
+    dialog.querySelector<HTMLElement>('#customer-suggestions')!.innerHTML=found.map(c=>`<button type="button" data-action="choose-job-customer" data-id="${e(c.id)}"><strong>${e(c.name || c.company)}</strong><small>${e([c.phone,c.address].filter(Boolean).join(' · '))}</small></button>`).join('');
+    dialog.querySelector<HTMLElement>('#customer-hint')!.textContent=found.length ? 'Vyberte uložený kontakt alebo pokračujte ako nový zákazník.' : 'Nový kontakt sa uloží spolu s výjazdom.';
+  }
   if (el.id === 'page-search') { const pos = el.selectionStart; state.query = el.value; render(); const replacement = document.querySelector<HTMLInputElement>('#page-search'); replacement?.focus(); if (replacement && pos !== null) { try { replacement.setSelectionRange(pos, pos); } catch { /* input type support */ } } }
 });
 document.addEventListener('change', event => {
