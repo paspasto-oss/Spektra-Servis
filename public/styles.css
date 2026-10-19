@@ -45,3 +45,5 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 .event-servis{background:#1967d2}.event-revizia{background:#137333}.event-obhliadka{background:#8430a6}.event-montaz{background:#b45309}
 .time-legend{padding:14px 20px;display:flex;gap:16px;flex-wrap:wrap;color:#5f6368;font-size:12px}.time-legend span{display:flex;align-items:center;gap:6px}.time-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 @media(max-width:760px){.time-week{min-width:840px}.time-calendar{max-height:65vh}.time-legend{gap:10px;font-size:11px}.google-calendar .calendar-toolbar{padding:12px}}
+
+.time-slot{position:absolute;left:0;width:100%;height:36px;border:0;background:transparent;cursor:pointer;padding:0;border-radius:0}.time-slot:hover{background:#e8f0fe}.time-slot:focus-visible{background:#d2e3fc;outline:2px solid #1a73e8;outline-offset:-2px}
