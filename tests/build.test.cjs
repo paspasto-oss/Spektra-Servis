@@ -21,3 +21,11 @@ test('hosting deploy is static-only and has no bound production Firebase project
   const html = fs.readFileSync(path.join(root, 'dist/index.html'), 'utf8');
   assert.match(html, /type="module" src="\.\/assets\/app\.js"/);
 });
+test('service worker serves cached PDFs instead of replacing them with the app shell', () => {
+  const worker = fs.readFileSync(path.join(root, 'dist/sw.js'), 'utf8');
+  const assetBranch = worker.indexOf('if(URLS.includes(url.href))');
+  const navigationBranch = worker.indexOf("if(req.mode==='navigate')");
+  assert.ok(assetBranch >= 0, 'cached asset branch exists');
+  assert.ok(navigationBranch >= 0, 'app navigation fallback exists');
+  assert.ok(assetBranch < navigationBranch, 'cached PDFs are handled before navigation fallback');
+});
