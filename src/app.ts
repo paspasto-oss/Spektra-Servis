@@ -25,7 +25,7 @@ import { demoData } from './demo.js';
 
 const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Ponuky / RS2','jobs'],['files','Súbory / OneDrive','upload']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
-let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'month', knowledgeTab: 'all', workspace: 'real' };
+let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'week', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
@@ -178,6 +178,11 @@ async function act(action: string, el: HTMLElement): Promise<void> {
   if (action === 'new-customer') return openEditor('customer');
   if (action === 'new-device') return openEditor('device');
   if (action === 'new-job') return openEditor('job');
+  if (action === 'new-job-slot') {
+    const day = el.dataset.date || state.date;
+    state.date = day; state.month = day.slice(0, 7);
+    return openEditor('job', '', { day, time: el.dataset.time || '09:00' });
+  }
   if (action === 'new-job-day') return openEditor('job', '', { day: state.date });
   if (action === 'new-tip') return openEditor('tip');
   if (action === 'edit-settings') return openEditor('settings');
