@@ -54,7 +54,7 @@ function canClose(): boolean { return !busy && (!dirty || confirm('Zahodiť neul
 function closeEditor(): boolean { if (!canClose()) return false; dialog.close(); editor = null; pendingEditor = null; dirty = false; return true; }
 function openEditor(type: EditorType, id = '', extra: Partial<Editor> = {}): void {
   if (dialog.open && !closeEditor()) return;
-  if ((type === 'job' || type === 'device') && !data.customers.some(c => !c.archived) && !id) { pendingEditor = { type, extra }; message('Najprv uložte zákazníka. Potom pokračujeme v rozpracovanom formulári.'); type = 'customer'; }
+  if ((type === 'device') && !data.customers.some(c => !c.archived) && !id) { pendingEditor = { type, extra }; message('Najprv uložte zákazníka. Potom pokračujeme v rozpracovanom formulári.'); type = 'customer'; }
   editor = { type, id, revision: data.revision, ...extra }; dirty = false;
   const view = editorContent(editor, data);
   dialog.innerHTML = `<form id="entity-form"><div class="modal-head"><div><span class="eyebrow">SPEKTRA SERVIS</span><h2 id="editor-title">${e(view.title)}</h2></div><button type="button" class="icon-btn" data-action="close-editor" aria-label="Zavrieť formulár">${icon('close')}</button></div><div class="modal-body"><div id="form-error" class="form-error" role="alert" hidden></div>${view.content}${view.tools ? '<div class="editor-tools">' + view.tools + '</div>' : ''}</div><div class="modal-footer"><span class="tiny muted">Uloženie iba v tomto zariadení</span>${button('Zrušiť', 'close-editor', '', 'btn secondary')}<button class="btn primary" type="submit">${icon('check')}<span>Uložiť</span></button></div></form>`;
@@ -78,7 +78,14 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   }
   if (editor.type === 'job') {
     const old = data.jobs.find(x => x.id === editor!.id), start = s('start') ? toUtc(s('start')) : '';
-    const row: Job = { ...(old || common), updatedAt: now, number: old?.number || nextNumber(data, today().slice(0, 4)), customerId: s('customerId'), deviceId: s('deviceId'), title: s('title'), kind: s('kind') as Job['kind'], status: s('status') as Job['status'], start, duration: Number(s('duration')), address: s('address'), issue: s('issue'), resolution: s('resolution'), result: s('result') as Job['result'], payment: s('payment') as Job['payment'], amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
+    let customerId = s('customerId');
+    if (customerId === '__new__') {
+      if (!s('newCustomerName')) throw new Error('Vyplňte meno nového zákazníka.');
+      const customer: Customer = { ...stamp(), name: s('newCustomerName'), company: s('newCustomerCompany'), phone: s('newCustomerPhone'), email: s('newCustomerEmail'), address: s('newCustomerAddress'), notes: '', archived: false };
+      next.customers.push(customer);
+      customerId = customer.id;
+    }
+    const row: Job = { ...(old || common), updatedAt: now, number: old?.number || nextNumber(data, today().slice(0, 4)), customerId, deviceId: s('customerId') === '__new__' ? '' : s('deviceId'), title: s('title'), kind: s('kind') as Job['kind'], status: s('status') as Job['status'], start, duration: Number(s('duration')), address: s('address') || (s('customerId') === '__new__' ? s('newCustomerAddress') : ''), issue: s('issue'), resolution: s('resolution'), result: s('result') as Job['result'], payment: s('payment') as Job['payment'], amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
     const overlap = conflicts(row, data.jobs); if (overlap.length && !confirm('Termín sa prekrýva so zákazkou ' + overlap.map(j => j.number).join(', ') + '. Uložiť aj napriek prekryvu?')) return;
     next.jobs = old ? next.jobs.map(x => x.id === old.id ? row : x) : [...next.jobs, row];
   }
@@ -245,6 +252,9 @@ document.addEventListener('change', event => {
   if (el.id === 'manual-filter') manualFilter(el.value);
   if (el.id === 'job-filter' || el.id === 'customer-filter') { state.filter = el.value; render(); }
   if (el.id === 'job-customer') {
+    const fields = dialog.querySelector<HTMLFieldSetElement>('#job-new-customer');
+    if (fields) { fields.hidden = el.value !== '__new__'; fields.disabled = fields.hidden; }
+
     const device = dialog.querySelector<HTMLSelectElement>('#job-device'); if (device) device.innerHTML = deviceOptions(data, el.value);
     const address = dialog.querySelector<HTMLInputElement>('[name=address]'); if (address) address.value = data.customers.find(c => c.id === el.value)?.address || '';
   }
