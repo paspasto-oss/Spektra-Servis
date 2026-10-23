@@ -110,6 +110,15 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
 async function act(action: string, el: HTMLElement): Promise<void> {
   const id = el.dataset.id || '';
   if(syncBusy)throw Error('Práve prebieha synchronizácia, skúste o chvíľu.');
+  if (action === 'job-new-contact') {
+    const customer = dialog.querySelector<HTMLSelectElement>('#job-customer');
+    if (customer && customer.value !== '__new__') {
+      customer.value = '__new__';
+      customer.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    dialog.querySelector<HTMLInputElement>('[name=newCustomerName]')?.focus();
+    return;
+  }
   if(action==='job-files'){if(dirty)throw Error('Najskôr uložte zákazku.');if(!closeEditor())return;nav('files');const select=document.querySelector<HTMLSelectElement>('#attachment-form select');if(select)select.value=id;return;}
   if(action.startsWith('sync-')||action.startsWith('files-')){await cloudAction(action,id);return;}
   if (action.startsWith('onedrive-')) {
@@ -259,6 +268,7 @@ document.addEventListener('change', event => {
   if (el.id === 'job-customer') {
     const fields = dialog.querySelector<HTMLFieldSetElement>('#job-new-customer');
     if (fields) { fields.hidden = el.value !== '__new__'; fields.disabled = fields.hidden; }
+    dialog.querySelector('[data-action="job-new-contact"]')?.setAttribute('aria-expanded', String(el.value === '__new__'));
 
     const device = dialog.querySelector<HTMLSelectElement>('#job-device'); if (device) device.innerHTML = deviceOptions(data, el.value);
     const address = dialog.querySelector<HTMLInputElement>('[name=address]'); if (address) address.value = data.customers.find(c => c.id === el.value)?.address || '';
