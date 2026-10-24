@@ -12,8 +12,9 @@ export interface Device extends Base { customerId: string; type: keyof typeof DE
 export interface Job extends Base { number: string; customerId: string; deviceId: string; title: string; kind: Kind; status: JobStatus; start: string; duration: number; address: string; issue: string; resolution: string; result: 'pending' | 'ok' | 'fail'; payment: 'unpaid' | 'paid'; amount: number | null; costing?: CostLine[]; version: number }
 export interface Tip extends Base { title: string; category: 'fault' | 'tip' | 'regulation'; manufacturer: string; model: string; code: string; symptoms: string; solution: string; source: string; verification: 'draft' | 'field' | 'manufacturer'; verifiedAt: string; jobId: string }
 export interface Attachment extends Base { name:string; mime:string; bytes:number; jobId:string; itemId:string; driveAccount:string; manualId:string }
+export interface SppReport extends Base { reportNo:string; customerId:string; customerName:string; address:string; inspectionDate:string; state:'draft'|'ready'|'issued'; payload:string }
 export interface Settings { technician: string; company: string; baseAddress: string }
-export interface Data { schemaVersion: 1; revision: number; customers: Customer[]; devices: Device[]; jobs: Job[]; tips: Tip[]; settings: Settings; lastBackup: string; stocks?: Stock[]; catalogImportedAt?: string; attachments?: Attachment[] }
+export interface Data { schemaVersion: 1; revision: number; customers: Customer[]; devices: Device[]; jobs: Job[]; tips: Tip[]; settings: Settings; lastBackup: string; stocks?: Stock[]; catalogImportedAt?: string; attachments?: Attachment[]; sppReports?:SppReport[] }
 export const stamp = (): Base => { const now = new Date().toISOString(); return { id: crypto.randomUUID(), createdAt: now, updatedAt: now }; };
 export function emptyData(): Data { return { schemaVersion: 1, revision: 0, customers: [], devices: [], jobs: [], tips: [], settings: { technician: 'Pavol Pastorek', company: 'Spektra Install s.r.o.', baseAddress: 'Hollého 210, Rajec' }, lastBackup: '' }; }
 export const normalize = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('sk').trim();
@@ -48,8 +49,9 @@ export function validateData(input: unknown): Data {
   };
   if (!Number.isInteger(data.revision)) return fail('verzia dát');
   if(root.attachments!==undefined) data.attachments=arr(root.attachments,'prílohy',o=>({...base(o), name:str(o.name,'názov súboru',240),mime:choice(o.mime,['application/pdf','image/jpeg','image/png','image/webp','image/heic','image/heif'],'typ súboru'),bytes:num(o.bytes,'veľkosť súboru',1,100*1024*1024),jobId:str(o.jobId,'zákazka',80),itemId:str(o.itemId,'OneDrive súbor',200),driveAccount:str(o.driveAccount,'OneDrive účet',200),manualId:str(o.manualId,'návod',80)}));
+  if(root.sppReports!==undefined) data.sppReports=arr(root.sppReports,'revízne správy SPP',o=>({...base(o),reportNo:str(o.reportNo,'číslo správy SPP',60),customerId:str(o.customerId,'zákazník SPP',80),customerName:str(o.customerName,'meno zákazníka SPP',200),address:str(o.address,'adresa SPP',500),inspectionDate:date(o.inspectionDate,'dátum revízie SPP'),state:choice(o.state,['draft','ready','issued'],'stav správy SPP'),payload:str(o.payload,'obsah správy SPP',120000)}));
   for(const a of data.attachments||[]) if(a.jobId&&!data.jobs.some(j=>j.id===a.jobId))return fail('príloha bez zákazky');
-  const all = [...(data.attachments||[]), ...data.customers, ...data.devices, ...data.jobs, ...data.tips];
+  const all = [...(data.attachments||[]), ...(data.sppReports||[]), ...data.customers, ...data.devices, ...data.jobs, ...data.tips];
   if (new Set(all.map(x => x.id)).size !== all.length) return fail('opakované identifikátory');
   const customers = new Set(data.customers.map(x => x.id));
   const devices = new Map(data.devices.map(x => [x.id, x]));
@@ -69,5 +71,6 @@ export function validateData(input: unknown): Data {
     if (tip.verification !== 'draft' && (!tip.verifiedAt || (tip.category === 'fault' && !tip.model.trim()))) return fail('overenie rady vyžaduje dátum a pri poruche model');
     if (tip.verification === 'manufacturer' && !tip.source) return fail('podklad výrobcu vyžaduje odkaz na zdroj');
   }
+  for(const report of data.sppReports||[]){if(!report.customerName.trim()||!report.reportNo.trim())return fail('SPP správa bez zákazníka alebo čísla');if(report.customerId&&!customers.has(report.customerId))return fail('SPP správa bez zákazníka');try{const parsed=JSON.parse(report.payload);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return fail('obsah správy SPP');}catch{return fail('obsah správy SPP');}}
   return data;
 }

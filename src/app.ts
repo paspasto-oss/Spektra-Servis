@@ -9,7 +9,7 @@ import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/c
 import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
-import { APP_VERSION, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip } from './domain.js';
+import { APP_VERSION, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip, type SppReport } from './domain.js';
 import { today, addDays, dateLabel, localDate, toUtc, googleCalendarUrl, makeIcs, conflicts } from './lib/calendar.js';
 import { load, save, type Workspace } from './lib/store.js';
 import { download, exportBackup, importBackup } from './lib/backup.js';
@@ -287,6 +287,37 @@ document.addEventListener('change', event => {
 window.addEventListener('hashchange', () => { const route = location.hash.slice(1); if (route && state.route !== route) { if (dialog.open && !closeEditor()) { history.replaceState(null, '', '#' + state.route); return; } state.route = routes.some(r => r[0] === route) || route === 'settings' ? route : 'home'; state.query = ''; state.filter = ''; state.selectedCustomer = ''; render(); } });
 window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy || fileBusy || syncBusy) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', render); window.addEventListener('offline', render);
+window.addEventListener('message',event=>{
+ const frame=document.querySelector<HTMLIFrameElement>('.spp-frame');
+ if(event.origin!==location.origin||event.source!==frame?.contentWindow||!event.data||typeof event.data!=='object')return;
+ const reply=(payload:unknown)=>frame.contentWindow?.postMessage(payload,location.origin);
+ if(event.data.type==='spp-ready'){reply({type:'spp-state',customers:data.customers.filter(c=>!c.archived),reports:data.sppReports||[],settings:data.settings});return;}
+ if(event.data.type==='spp-lookup-company'){void companyByIco(String(event.data.ico||'')).then(company=>reply({type:'spp-company',company})).catch(error=>reply({type:'spp-error',message:error instanceof Error?error.message:'Firma sa nenašla.'}));return;}
+ if(event.data.type==='spp-delete'){
+  const id=String(event.data.id||'');if(!/^[a-zA-Z0-9_-]+$/.test(id))return;
+  void (async()=>{const next=structuredClone(data);next.sppReports=(next.sppReports||[]).filter(r=>r.id!==id);await commit(next);message('SPP revízna správa bola odstránená.');})().catch(fail);return;
+ }
+ if(event.data.type==='spp-import'){
+  void (async()=>{if(!Array.isArray(event.data.reports)||event.data.reports.length>500)throw Error('Neplatný alebo príliš veľký import SPP.');const next=structuredClone(data),map=new Map((next.sppReports||[]).map(r=>[r.id,r]));for(const input of event.data.reports){if(!input||typeof input!=='object')throw Error('Import SPP obsahuje neplatný záznam.');const id=String(input.id||crypto.randomUUID());map.set(id,{...input,id,customerId:next.customers.some(c=>c.id===input.customerId)?String(input.customerId):''});}next.sppReports=[...map.values()];await commit(validateData(next));message('Import SPP bol uložený.');})().catch(fail);return;
+ }
+ if(event.data.type!=='spp-save')return;
+ void (async()=>{
+  if(state.workspace!=='real')throw Error('SPP správy ukladajte vo vlastnom pracovnom priestore.');
+  const raw=event.data.report as Partial<SppReport>&{customer?:Partial<Customer>},now=new Date().toISOString();
+  if(typeof raw.payload!=='string'||raw.payload.length>120000)throw Error('SPP správa je príliš veľká alebo neplatná.');
+  const next=structuredClone(data),customerInput=raw.customer||{};let customerId=String(raw.customerId||'');
+  let customer=next.customers.find(c=>c.id===customerId);
+  const customerName=String(raw.customerName||customerInput.name||customerInput.company||'').trim();
+  if(event.data.saveCustomer&&customerName){
+   if(!customer){customer={...stamp(),name:String(customerInput.name||customerName),company:String(customerInput.company||''),ico:String(customerInput.ico||''),dic:String(customerInput.dic||''),icDph:String(customerInput.icDph||''),phone:String(customerInput.phone||''),email:String(customerInput.email||''),address:String(customerInput.address||raw.address||''),notes:'Vytvorené z revíznej správy SPP',archived:false};next.customers.push(customer);customerId=customer.id;}
+   else{for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const){const value=String(customerInput[key]||'').trim();if(value)customer[key]=value;}customer.updatedAt=now;}
+  }
+  const old=(next.sppReports||[]).find(r=>r.id===raw.id),base=old||stamp();
+  const report:SppReport={...base,id:String(raw.id||base.id),createdAt:old?.createdAt||base.createdAt,updatedAt:now,reportNo:String(raw.reportNo||'').trim(),customerId,customerName,address:String(raw.address||customer?.address||''),inspectionDate:String(raw.inspectionDate||''),state:['draft','ready','issued'].includes(String(raw.state))?raw.state as SppReport['state']:'draft',payload:raw.payload};
+  next.sppReports=old?(next.sppReports||[]).map(r=>r.id===old.id?report:r):[...(next.sppReports||[]),report];
+  await commit(validateData(next));message('SPP revízna správa bola uložená a zaradená do synchronizácie.');
+ })().catch(fail);
+});
 interface InstallEvent extends Event { prompt(): Promise<void> }
 let installPrompt: InstallEvent | undefined, waitingWorker: ServiceWorker | undefined;
 window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installPrompt = event as InstallEvent; });
