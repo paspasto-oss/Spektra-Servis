@@ -3,8 +3,8 @@ import { today, addDays, toUtc } from './lib/calendar.js';
 /** Explicitly fictional fixtures in a DIFFERENT workspace; never inserted into real data. */
 export function demoData(): Data {
   const data = emptyData(), day = today();
-  const customer1 = { ...stamp(), name: 'Ukážka — zákazník A', company: '', address: 'Rajec (ukážková adresa)', phone: '', email: '', notes: 'Fiktívny záznam iba na vyskúšanie aplikácie.', archived: false };
-  const customer2 = { ...stamp(), name: 'Ukážka — zákazník B', company: '', address: 'Žilina (ukážková adresa)', phone: '', email: '', notes: 'Fiktívny záznam.', archived: false };
+  const customer1 = { ...stamp(), name: 'Ukážka — zákazník A', company: '', ico:'', dic:'', icDph:'', address: 'Rajec (ukážková adresa)', phone: '', email: '', notes: 'Fiktívny záznam iba na vyskúšanie aplikácie.', archived: false };
+  const customer2 = { ...stamp(), name: 'Ukážka — zákazník B', company: '', ico:'', dic:'', icDph:'', address: 'Žilina (ukážková adresa)', phone: '', email: '', notes: 'Fiktívny záznam.', archived: false };
   data.customers.push(customer1, customer2);
   const device1 = { ...stamp(), customerId: customer1.id, type: 'gas' as const, manufacturer: 'Ukážkový výrobca', model: 'Plynový kotol', serial: 'DEMO-001', location: customer1.address, nextService: addDays(day, 8), notes: 'Fiktívne zariadenie.', archived: false };
   const device2 = { ...stamp(), customerId: customer2.id, type: 'heatpump' as const, manufacturer: 'Ukážkový výrobca', model: 'Tepelné čerpadlo', serial: 'DEMO-002', location: customer2.address, nextService: addDays(day, 20), notes: '', archived: false };

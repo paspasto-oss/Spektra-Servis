@@ -18,6 +18,7 @@ const paths: Record<string, string> = {
  phone: '<path d="m5 3 4 1 1 5-3 2a15 15 0 0 0 6 6l2-3 5 1 1 4c-1 5-9 2-14-3S0 4 5 3Z"/>',
  device: '<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M8 6h8M8 17h8M10 20h4"/><circle cx="12" cy="11" r="2"/>',
  download: '<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>', upload: '<path d="M12 16V4m-5 5 5-5 5 5M4 17v4h16v-4"/>',
+ file: '<path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>',
  close: '<path d="m6 6 12 12M6 18 18 6"/>', edit: '<path d="m15 4 5 5M4 16 16 4a3 3 0 0 1 4 4L8 20l-5 1 1-5Z"/>',
  alert: '<path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5M12 17v1"/>', cloud: '<path d="M6 18a5 5 0 0 1-1-10 7 7 0 0 1 13-1 5 5 0 0 1 0 11H6Z"/>',
  external: '<path d="M14 3h7v7M21 3 10 14M11 5H4v16h16v-7"/>', archive: '<rect x="3" y="3" width="18" height="5" rx="1"/><path d="M5 8v13h14V8M9 12h6"/>',

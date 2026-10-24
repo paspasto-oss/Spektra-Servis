@@ -20,6 +20,37 @@ export async function initCloud():Promise<void>{const c=await sdk();const {data}
 export async function loginCloud(email:string,password:string):Promise<void>{const c=await sdk();const {data,error}=await c.auth.signInWithPassword({email,password});if(error||!data.user)throw Error('Prihlásenie sa nepodarilo. Použite e-mail a heslo z Cenových ponúk.');user=data.user;cloudState.email=user.email||'';const m=await loadSyncMeta();if(m&&m.owner!==user.id){await c.auth.signOut({scope:'local'});user=null;throw Error('Toto zariadenie je prepojené s iným účtom. Prihláste sa pôvodným účtom; miestne údaje neboli prenesené.');}cloudState.enabled=!!m?.enabled;cloudState.status=cloudState.enabled?'Čaká na synchronizáciu':'Prihlásené; zapnite synchronizáciu zariadenia';}
 export async function logoutCloud():Promise<void>{await (await sdk()).auth.signOut({scope:'local'});user=null;cloudState.email='';cloudState.enabled=false;cloudState.status='Odhlásené · údaje zostávajú v zariadení';}
 export async function enableCloud():Promise<Data>{if(!user)throw Error('Najskôr sa prihláste.');const local=await load('real'),m=await loadSyncMeta();if(m&&m.owner!==user.id)throw Error('Zariadenie patrí inému účtu.');if(!m)await recoverySnapshot(local);const result=await save('real',local,local.revision,{owner:user.id,base:m?.base||initialBase(),remoteRevision:m?.remoteRevision||0,enabled:true});cloudState.enabled=true;return result;}
+
+const folded=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const phoneKey=(value:string)=>value.replace(/\D/g,'');
+function contactKeys(c:{name:string;company:string;phone:string;email:string;address:string}):string[]{
+ const keys:string[]=[];const phone=phoneKey(c.phone||''),email=folded(c.email||'');
+ if(phone.length>=7)keys.push('p:'+phone);if(email)keys.push('e:'+email);
+ const name=folded(c.name||c.company||''),address=folded(c.address||'');if(name&&address)keys.push('n:'+name+'|'+address);
+ return keys;
+}
+async function reconcileSharedCustomers(input:Data):Promise<Data>{
+ if(!user)return input;const c=await sdk();
+ const {data:rows,error}=await c.from('customers').select('id,name,company,ico,dic,ic_dph,phone,email,address,notes,archived,created_at,updated_at');
+ if(error)throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
+ const next=structuredClone(input),byKey=new Map<string,any>();
+ for(const row of rows||[])for(const key of contactKeys({name:row.name||'',company:row.company||'',phone:row.phone||'',email:row.email||'',address:row.address||''}))if(!byKey.has(key))byKey.set(key,row);
+ const ids=new Set((rows||[]).map((row:any)=>row.id));
+ for(const local of [...next.customers]){
+  const remote=(rows||[]).find((row:any)=>row.id===local.id)||contactKeys(local).map(key=>byKey.get(key)).find(Boolean);
+  if(remote&&remote.id!==local.id){
+   for(const d of next.devices)if(d.customerId===local.id)d.customerId=remote.id;
+   for(const j of next.jobs)if(j.customerId===local.id)j.customerId=remote.id;
+   local.id=remote.id;
+  }
+  if(remote&&Date.parse(remote.updated_at||'')>Date.parse(local.updatedAt||''))Object.assign(local,{name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||local.createdAt,updatedAt:remote.updated_at||local.updatedAt});
+  ids.add(local.id);
+ }
+ for(const remote of rows||[])if(!next.customers.some(x=>x.id===remote.id))next.customers.push({id:remote.id,name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||new Date().toISOString(),updatedAt:remote.updated_at||new Date().toISOString()});
+ const payload=next.customers.map(x=>({id:x.id,name:x.name||x.company||'Bez mena',company:x.company||null,ico:x.ico||null,dic:x.dic||null,ic_dph:x.icDph||null,phone:x.phone||null,email:x.email||null,address:x.address||null,notes:x.notes||null,archived:x.archived,created_at:x.createdAt,updated_at:x.updatedAt,updated_by:user!.id,source_app:'servis'}));
+ if(payload.length){const written=await c.from('customers').upsert(payload,{onConflict:'id'});if(written.error)throw Error('Spoločný adresár sa nepodarilo uložiť. Miestne údaje zostali zachované.');}
+ return next;
+}
 /** Persist remote baseline and local result in ONE transaction: crash/retry cannot lose pending edits. */
 export async function synchronize(choice?:ConflictChoice):Promise<Data|undefined>{
  if(!cloudState.enabled||!user)return;
@@ -37,6 +68,7 @@ export async function synchronize(choice?:ConflictChoice):Promise<Data|undefined
  cloudState.conflicts=merged.conflicts;
  if(merged.conflicts.length&&!choice){cloudState.status='Konflikt úprav · vyberte verziu v Nastaveniach';return;}
  if(choice)await recoverySnapshot(local);
+ merged.data=await reconcileSharedCustomers(merged.data);
  let remoteRevision=revision;
  if(!result.data||!equal(syncPayload(merged.data),syncPayload(remote))){
   const sent=await c.rpc('servis_sync_write',{expected_revision:revision,new_payload:syncPayload(merged.data)});

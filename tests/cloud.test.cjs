@@ -1,8 +1,8 @@
 const {test}=require('node:test');const a=require('node:assert/strict');require('fake-indexeddb/auto');
 const {demoData}=require('../.build/demo.js');const {emptyData}=require('../.build/domain.js');const store=require('../.build/lib/store.js');
 Object.defineProperty(global,'navigator',{value:{onLine:true},configurable:true});
-let sessionUser={id:'owner-1',email:'owner@example.test'},row=null,casReject=false,networkError=false,race=null,authChange;
-const sdk={auth:{onAuthStateChange:fn=>{authChange=fn},getSession:async()=>({data:{session:{user:sessionUser}}}),signInWithPassword:async()=>({data:{user:sessionUser}}),signOut:async()=>authChange('SIGNED_OUT',null)},from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:row?structuredClone(row):null,error:networkError?new Error():null})})})}),rpc:async(_name,args)=>{
+let sessionUser={id:'owner-1',email:'owner@example.test'},row=null,customerRows=[],casReject=false,networkError=false,race=null,authChange;
+const sdk={auth:{onAuthStateChange:fn=>{authChange=fn},getSession:async()=>({data:{session:{user:sessionUser}}}),signInWithPassword:async()=>({data:{user:sessionUser}}),signOut:async()=>authChange('SIGNED_OUT',null)},from:table=>table==='customers'?({select:async()=>({data:structuredClone(customerRows),error:null}),upsert:async rows=>{customerRows=structuredClone(rows);return {error:null}}}):({select:()=>({eq:()=>({maybeSingle:async()=>({data:row?structuredClone(row):null,error:networkError?new Error():null})})})}),rpc:async(_name,args)=>{
  if(casReject)return {data:0};if(args.expected_revision!==(row?.revision||0))return {data:0};row={payload:structuredClone(args.new_payload),revision:(row?.revision||0)+1};if(race){const r=race;race=null;await r();}return {data:row.revision};}};
 global.window={supabase:{createClient:()=>sdk}};
 const cloud=require('../.build/lib/cloud.js');

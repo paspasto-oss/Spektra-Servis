@@ -20,10 +20,12 @@ import { customersPage } from './modules/customers.js';
 import { calendarPage } from './modules/calendar-view.js';
 import { knowledgePage } from './modules/knowledge.js';
 import { settingsPage } from './modules/settings.js';
+import { embeddedApp, sppRevisionPage } from './modules/apps.js';
+import { companyByIco } from './lib/company-register.js';
 import { editorContent, deviceOptions, type Editor, type EditorType } from './modules/editors.js';
 import { demoData } from './demo.js';
 
-const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Ponuky / RS2','jobs'],['files','Súbory / OneDrive','upload']];
+const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['quotes','Cenové ponuky','euro'], ['rs2','RS2 revízie','shield'], ['spp','SPP revízie','file'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Sklad a kalkulácie','jobs'],['files','Súbory / OneDrive','upload']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
 let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'week', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
@@ -39,10 +41,10 @@ function fail(err: unknown): void { const text = err instanceof Error ? err.mess
 function nav(route: string): void { state.route = route; state.query = ''; state.filter = ''; if (route !== 'jobs') state.selectedCustomer = ''; location.hash = route; render(); window.scrollTo({ top: 0 }); }
 function render(): void {
   if (!ready) return;
-  const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), files:()=>state.workspace==='demo'?'<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>':filesPage(data,fileQueue.filter(f=>f.owner===cloudUser()),fileStatus), settings: () => settingsPage(data, state.workspace === 'demo') };
+  const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), quotes:()=>embeddedApp('quotes'), rs2:()=>embeddedApp('rs2'), spp:()=>sppRevisionPage(), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), files:()=>state.workspace==='demo'?'<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>':filesPage(data,fileQueue.filter(f=>f.owner===cloudUser()),fileStatus), settings: () => settingsPage(data, state.workspace === 'demo') };
   const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
   root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${icon('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${icon('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${e(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${e(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${e(cloudState.enabled?cloudState.status:(navigator.onLine?'Uložené v zariadení':'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>${e(cloudState.enabled?cloudState.status:"Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · prepojené Cenové ponuky a RS2</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${e(cloudState.enabled?cloudState.status:(navigator.onLine?'Uložené v zariadení':'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>${e(cloudState.enabled?cloudState.status:"Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
 setManualRefresh(() => { if (state.route === 'knowledge') render(); });
 async function commit(next: Data, expected = data.revision): Promise<void> {
@@ -67,7 +69,7 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   const common = { ...stamp(), updatedAt: now };
   if (editor.type === 'customer') {
     const old = data.customers.find(x => x.id === editor!.id);
-    const row: Customer = { ...(old || common), updatedAt: now, name: s('name'), company: s('company'), phone: s('phone'), email: s('email'), address: s('address'), notes: s('notes'), archived: old?.archived || false };
+    const row: Customer = { ...(old || common), updatedAt: now, name: s('name'), company: s('company'), ico:s('ico'), dic:s('dic'), icDph:s('icDph'), phone: s('phone'), email: s('email'), address: s('address'), notes: s('notes'), archived: old?.archived || false };
     next.customers = old ? next.customers.map(x => x.id === old.id ? row : x) : [...next.customers, row];
   }
   if (editor.type === 'device') {
@@ -81,7 +83,7 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
     let customerId = s('customerId');
     if (customerId === '__new__') {
       if (!s('newCustomerName')) throw new Error('Vyplňte meno nového zákazníka.');
-      const customer: Customer = { ...stamp(), name: s('newCustomerName'), company: s('newCustomerCompany'), phone: s('newCustomerPhone'), email: s('newCustomerEmail'), address: s('newCustomerAddress'), notes: '', archived: false };
+      const customer: Customer = { ...stamp(), name: s('newCustomerName'), company: s('newCustomerCompany'), ico:'', dic:'', icDph:'', phone: s('newCustomerPhone'), email: s('newCustomerEmail'), address: s('newCustomerAddress'), notes: '', archived: false };
       next.customers.push(customer);
       customerId = customer.id;
     }
@@ -110,6 +112,13 @@ async function switchWorkspace(workspace: Workspace): Promise<void> {
 async function act(action: string, el: HTMLElement): Promise<void> {
   const id = el.dataset.id || '';
   if(syncBusy)throw Error('Práve prebieha synchronizácia, skúste o chvíľu.');
+  if(action==='lookup-company'){
+    const form=dialog.querySelector<HTMLFormElement>('#entity-form');if(!form)throw Error('Formulár nie je otvorený.');
+    const ico=form.elements.namedItem('ico') as HTMLInputElement|null;if(!ico)throw Error('Pole IČO sa nenašlo.');
+    el.setAttribute('aria-busy','true');(el as HTMLButtonElement).disabled=true;
+    try{const company=await companyByIco(ico.value);const set=(name:string,value:string)=>{const input=form.elements.namedItem(name) as HTMLInputElement|null;if(input&&value){input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}};set('ico',company.ico);set('company',company.name);set('dic',company.dic);set('icDph',company.icDph);set('address',company.address);dirty=true;const status=form.querySelector<HTMLElement>('.company-lookup-status');if(status)status.textContent='Firma bola načítaná. Pred uložením skontrolujte názov, adresu a daňové údaje.';message('Firemné údaje boli doplnené podľa IČO.');}
+    finally{el.removeAttribute('aria-busy');(el as HTMLButtonElement).disabled=false;}return;
+  }
   if (action === 'job-new-contact') {
     const customer = dialog.querySelector<HTMLSelectElement>('#job-customer');
     if (customer && customer.value !== '__new__') {
