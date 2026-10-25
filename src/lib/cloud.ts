@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import { validateData, type Data } from '../domain.js';
+import { validateData, normalize, customerPhoneKey, type Data } from '../domain.js';
 import { equal, mergeData, syncPayload, initialBase, type ConflictChoice } from './sync-merge.js';
 import { load, save, loadSyncMeta, recoverySnapshot, type SyncMeta } from './store.js';
 declare global { interface Window { supabase?:typeof import('@supabase/supabase-js') } }
@@ -21,12 +21,10 @@ export async function loginCloud(email:string,password:string):Promise<void>{con
 export async function logoutCloud():Promise<void>{await (await sdk()).auth.signOut({scope:'local'});user=null;cloudState.email='';cloudState.enabled=false;cloudState.status='Odhlásené · údaje zostávajú v zariadení';}
 export async function enableCloud():Promise<Data>{if(!user)throw Error('Najskôr sa prihláste.');const local=await load('real'),m=await loadSyncMeta();if(m&&m.owner!==user.id)throw Error('Zariadenie patrí inému účtu.');if(!m)await recoverySnapshot(local);const result=await save('real',local,local.revision,{owner:user.id,base:m?.base||initialBase(),remoteRevision:m?.remoteRevision||0,enabled:true});cloudState.enabled=true;return result;}
 
-const folded=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
-const phoneKey=(value:string)=>value.replace(/\D/g,'');
 function contactKeys(c:{name:string;company:string;phone:string;email:string;address:string}):string[]{
- const keys:string[]=[];const phone=phoneKey(c.phone||''),email=folded(c.email||'');
- if(phone.length>=7)keys.push('p:'+phone);if(email)keys.push('e:'+email);
- const name=folded(c.name||c.company||''),address=folded(c.address||'');if(name&&address)keys.push('n:'+name+'|'+address);
+ const keys:string[]=[];const name=normalize(c.name||c.company||''),phone=customerPhoneKey(c.phone||''),email=(c.email||'').trim().toLowerCase(),address=normalize(c.address||'');
+ if(name&&phone.length>=7)keys.push('np:'+name+'|'+phone);if(name&&email.includes('@'))keys.push('ne:'+name+'|'+email);
+ if(name&&!phone&&!email&&address)keys.push('na:'+name+'|'+address);
  return keys;
 }
 async function reconcileSharedCustomers(input:Data):Promise<Data>{

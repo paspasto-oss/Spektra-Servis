@@ -17,6 +17,14 @@ export interface Settings { technician: string; company: string; baseAddress: st
 export interface Data { schemaVersion: 1; revision: number; customers: Customer[]; devices: Device[]; jobs: Job[]; tips: Tip[]; settings: Settings; lastBackup: string; stocks?: Stock[]; catalogImportedAt?: string; attachments?: Attachment[]; sppReports?:SppReport[] }
 export const stamp = (): Base => { const now = new Date().toISOString(); return { id: crypto.randomUUID(), createdAt: now, updatedAt: now }; };
 export function emptyData(): Data { return { schemaVersion: 1, revision: 0, customers: [], devices: [], jobs: [], tips: [], settings: { technician: 'Pavol Pastorek', company: 'Spektra Install s.r.o.', baseAddress: 'Hollého 210, Rajec' }, lastBackup: '' }; }
+export const customerPhoneKey=(value:string):string=>{const digits=value.replace(/\D/g,'');return digits.length>=9?digits.slice(-9):digits;};
+export function sameCustomer(a:Pick<Customer,'name'|'company'|'phone'|'email'|'address'>,b:Pick<Customer,'name'|'company'|'phone'|'email'|'address'>):boolean{
+  const nameA=normalize(a.name||a.company),nameB=normalize(b.name||b.company);if(!nameA||nameA!==nameB)return false;
+  const phoneA=customerPhoneKey(a.phone),phoneB=customerPhoneKey(b.phone),emailA=a.email.trim().toLowerCase(),emailB=b.email.trim().toLowerCase();
+  if(phoneA.length>=7&&phoneA===phoneB)return true;
+  if(emailA.includes('@')&&emailA===emailB)return true;
+  return !phoneA&&!phoneB&&!emailA&&!emailB&&!!normalize(a.address)&&normalize(a.address)===normalize(b.address);
+}
 export const normalize = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('sk').trim();
 export const matches = (text: string, q: string): boolean => normalize(q).split(/\s+/).every(part => normalize(text).includes(part));
 export const isOpen = (j: Job): boolean => j.status !== 'done' && j.status !== 'cancelled';

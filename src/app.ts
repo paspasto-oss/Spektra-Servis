@@ -9,7 +9,7 @@ import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/c
 import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
-import { APP_VERSION, emptyData, stamp, validateData, nextNumber, type Data, type Job, type Customer, type Device, type Tip, type SppReport } from './domain.js';
+import { APP_VERSION, emptyData, stamp, validateData, nextNumber, normalize, sameCustomer, type Data, type Job, type Customer, type Device, type Tip, type SppReport } from './domain.js';
 import { today, addDays, dateLabel, localDate, toUtc, googleCalendarUrl, makeIcs, conflicts } from './lib/calendar.js';
 import { load, save, type Workspace } from './lib/store.js';
 import { download, exportBackup, importBackup } from './lib/backup.js';
@@ -70,7 +70,8 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   if (editor.type === 'customer') {
     const old = data.customers.find(x => x.id === editor!.id);
     const row: Customer = { ...(old || common), updatedAt: now, name: s('name'), company: s('company'), ico:s('ico'), dic:s('dic'), icDph:s('icDph'), phone: s('phone'), email: s('email'), address: s('address'), notes: s('notes'), archived: old?.archived || false };
-    next.customers = old ? next.customers.map(x => x.id === old.id ? row : x) : [...next.customers, row];
+    const duplicate=!old&&next.customers.find(x=>sameCustomer(x,row));
+    next.customers = old ? next.customers.map(x => x.id === old.id ? row : x) : duplicate ? next.customers.map(x=>x.id===duplicate.id?{...x,...row,id:x.id,createdAt:x.createdAt}:x) : [...next.customers, row];
   }
   if (editor.type === 'device') {
     const old = data.devices.find(x => x.id === editor!.id);
@@ -84,8 +85,9 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
     if (customerId === '__new__') {
       if (!s('newCustomerName')) throw new Error('Vyplňte meno nového zákazníka.');
       const customer: Customer = { ...stamp(), name: s('newCustomerName'), company: s('newCustomerCompany'), ico:'', dic:'', icDph:'', phone: s('newCustomerPhone'), email: s('newCustomerEmail'), address: s('newCustomerAddress'), notes: '', archived: false };
-      next.customers.push(customer);
-      customerId = customer.id;
+      const duplicate=next.customers.find(x=>sameCustomer(x,customer));
+      if(duplicate){customerId=duplicate.id;Object.assign(duplicate,{name:customer.name||duplicate.name,company:customer.company||duplicate.company,phone:customer.phone||duplicate.phone,email:customer.email||duplicate.email,address:customer.address||duplicate.address,updatedAt:now,archived:false});}
+      else{next.customers.push(customer);customerId=customer.id;}
     }
     const row: Job = { ...(old || common), updatedAt: now, number: old?.number || nextNumber(data, today().slice(0, 4)), customerId, deviceId: s('customerId') === '__new__' ? '' : s('deviceId'), title: s('title'), kind: s('kind') as Job['kind'], status: s('status') as Job['status'], start, duration: Number(s('duration')), address: s('address') || (s('customerId') === '__new__' ? s('newCustomerAddress') : ''), issue: s('issue'), resolution: s('resolution'), result: s('result') as Job['result'], payment: s('payment') as Job['payment'], amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
     const overlap = conflicts(row, data.jobs); if (overlap.length && !confirm('Termín sa prekrýva so zákazkou ' + overlap.map(j => j.number).join(', ') + '. Uložiť aj napriek prekryvu?')) return;
@@ -127,6 +129,11 @@ async function act(action: string, el: HTMLElement): Promise<void> {
     }
     dialog.querySelector<HTMLInputElement>('[name=newCustomerName]')?.focus();
     return;
+  }
+  if(action==='job-pick-contact'){
+    const customer=data.customers.find(c=>c.id===id);if(!customer)return;
+    const select=dialog.querySelector<HTMLSelectElement>('#job-customer');if(select){select.value=customer.id;select.dispatchEvent(new Event('change',{bubbles:true}));}
+    dirty=true;return;
   }
   if(action==='job-files'){if(dirty)throw Error('Najskôr uložte zákazku.');if(!closeEditor())return;nav('files');const select=document.querySelector<HTMLSelectElement>('#attachment-form select');if(select)select.value=id;return;}
   if(action.startsWith('sync-')||action.startsWith('files-')){await cloudAction(action,id);return;}
@@ -268,6 +275,12 @@ document.addEventListener('submit', event => { if ((event.target as HTMLElement)
 document.addEventListener('input', event => {
   const el = event.target as HTMLInputElement;
   if (el.id === 'page-search') { const pos = el.selectionStart; state.query = el.value; render(); const replacement = document.querySelector<HTMLInputElement>('#page-search'); replacement?.focus(); if (replacement && pos !== null) { try { replacement.setSelectionRange(pos, pos); } catch { /* input type support */ } } }
+  if(el.name==='newCustomerName'){
+    const host=dialog.querySelector<HTMLElement>('#job-contact-suggestions'),q=normalize(el.value);if(!host)return;
+    if(q.length<3){host.hidden=true;host.replaceChildren();return;}
+    const rows=data.customers.filter(c=>!c.archived&&normalize([c.name,c.company,c.phone,c.email,c.address].join(' ')).includes(q)).slice(0,10);
+    host.innerHTML=rows.map(c=>button(c.name||c.company,'job-pick-contact','', 'btn secondary',`data-id="${e(c.id)}"`)+'<small>'+e([c.phone,c.email,c.address].filter(Boolean).join(' • '))+'</small>').join('')||'<small>Kontakt sa nenašiel. Uloží sa nový.</small>';host.hidden=false;
+  }
 });
 document.addEventListener('change', event => {
   const el = event.target as HTMLSelectElement;
@@ -309,7 +322,7 @@ window.addEventListener('message',event=>{
   let customer=next.customers.find(c=>c.id===customerId);
   const customerName=String(raw.customerName||customerInput.name||customerInput.company||'').trim();
   if(event.data.saveCustomer&&customerName){
-   if(!customer){customer={...stamp(),name:String(customerInput.name||customerName),company:String(customerInput.company||''),ico:String(customerInput.ico||''),dic:String(customerInput.dic||''),icDph:String(customerInput.icDph||''),phone:String(customerInput.phone||''),email:String(customerInput.email||''),address:String(customerInput.address||raw.address||''),notes:'Vytvorené z revíznej správy SPP',archived:false};next.customers.push(customer);customerId=customer.id;}
+   if(!customer){const candidate:Customer={...stamp(),name:String(customerInput.name||customerName),company:String(customerInput.company||''),ico:String(customerInput.ico||''),dic:String(customerInput.dic||''),icDph:String(customerInput.icDph||''),phone:String(customerInput.phone||''),email:String(customerInput.email||''),address:String(customerInput.address||raw.address||''),notes:'Vytvorené z revíznej správy SPP',archived:false};customer=next.customers.find(c=>sameCustomer(c,candidate));if(!customer){customer=candidate;next.customers.push(customer);}customerId=customer.id;}
    else{for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const){const value=String(customerInput[key]||'').trim();if(value)customer[key]=value;}customer.updatedAt=now;}
   }
   const old=(next.sppReports||[]).find(r=>r.id===raw.id),base=old||stamp();
