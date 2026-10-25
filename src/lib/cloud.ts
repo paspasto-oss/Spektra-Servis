@@ -33,18 +33,34 @@ async function reconcileSharedCustomers(input:Data):Promise<Data>{
  if(error)throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
  const next=structuredClone(input),byKey=new Map<string,any>();
  for(const row of rows||[])for(const key of contactKeys({name:row.name||'',company:row.company||'',phone:row.phone||'',email:row.email||'',address:row.address||''}))if(!byKey.has(key))byKey.set(key,row);
- const ids=new Set((rows||[]).map((row:any)=>row.id));
+
  for(const local of [...next.customers]){
   const remote=(rows||[]).find((row:any)=>row.id===local.id)||contactKeys(local).map(key=>byKey.get(key)).find(Boolean);
   if(remote&&remote.id!==local.id){
    for(const d of next.devices)if(d.customerId===local.id)d.customerId=remote.id;
    for(const j of next.jobs)if(j.customerId===local.id)j.customerId=remote.id;
+   for(const report of next.sppReports||[])if(report.customerId===local.id)report.customerId=remote.id;
    local.id=remote.id;
   }
   if(remote&&Date.parse(remote.updated_at||'')>Date.parse(local.updatedAt||''))Object.assign(local,{name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||local.createdAt,updatedAt:remote.updated_at||local.updatedAt});
-  ids.add(local.id);
+
  }
  for(const remote of rows||[])if(!next.customers.some(x=>x.id===remote.id))next.customers.push({id:remote.id,name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||new Date().toISOString(),updatedAt:remote.updated_at||new Date().toISOString()});
+ // Several local contacts may resolve to the same shared customer ID.
+ // Collapse them before UPSERT and before saving the synchronized workspace.
+ const unique=new Map<string,Data['customers'][number]>();
+ for(const contact of next.customers){
+  const previous=unique.get(contact.id);
+  if(!previous){unique.set(contact.id,contact);continue;}
+  const newer=Date.parse(contact.updatedAt)>Date.parse(previous.updatedAt)?contact:previous;
+  const older=newer===contact?previous:contact;
+  const merged={...older,...newer};
+  for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const)if(!merged[key])merged[key]=older[key]||'';
+  merged.notes=[...new Set([older.notes,newer.notes].filter(Boolean))].join('\n');
+  merged.createdAt=older.createdAt<newer.createdAt?older.createdAt:newer.createdAt;
+  unique.set(contact.id,merged);
+ }
+ next.customers=[...unique.values()];
  const payload=next.customers.map(x=>({id:x.id,name:x.name||x.company||'Bez mena',company:x.company||null,ico:x.ico||null,dic:x.dic||null,ic_dph:x.icDph||null,phone:x.phone||null,email:x.email||null,address:x.address||null,notes:x.notes||null,archived:x.archived,created_at:x.createdAt,updated_at:x.updatedAt,updated_by:user!.id,source_app:'servis'}));
  if(payload.length){const written=await c.from('customers').upsert(payload,{onConflict:'id'});if(written.error)throw Error('Spoločný adresár sa nepodarilo uložiť. Miestne údaje zostali zachované.');}
  return next;
