@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 60371)
-Total output lines: 2724
-
 <!doctype html>
 <html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#c20000"><meta name="description" content="Spektra Servis — zákazníci, zariadenia, zákazky a kalendár pre jedného technika."><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Spektra Servis"><title>Spektra Servis</title><style>:root{--bg:#f3f6f8;--paper:#fff;--ink:#173247;--muted:#607183;--line:#dce5ed;--red:#c20000;--red-soft:#fff1f2;--blue:#00539b;--nav:#063d70;--green:#28775c;--radius:16px;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-synthesis:none;color:var(--ink);background:var(--bg);font-size:14px;line-height:1.5}
 *{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}a{color:inherit}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #f68e98;outline-offset:3px}button{touch-action:manipulation}button span{pointer-events:none}.icon{width:20px;height:20px;flex-shrink:0;vertical-align:middle}.muted{color:var(--muted)}.tiny{font-size:12px}.eyebrow{font-size:10px;letter-spacing:1.8px;font-weight:750;color:var(--red);margin-bottom:7px}.success-text{color:var(--green)}.danger-text{color:#b32032}.text-link{border:0;background:none;color:var(--ink);padding:0;text-align:left;font-weight:650;cursor:pointer}.text-link:hover{color:var(--red)}h1,h2,h3,p{margin:0}h1{font-size:32px;line-height:1.2;letter-spacing:-1.1px;font-weight:740}h2{font-size:17px;letter-spacing:-.3px}h3{font-size:14px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:10px;min-height:42px;padding:10px 15px;text-decoration:none;font-size:12px;font-weight:670;white-space:normal;line-height:1.4;transition:background .15s,transform .15s}.btn:active{transform:translateY(1px)}.btn .icon{width:17px;height:17px}.primary{background:var(--red);color:white;box-shadow:0 3px 6px #c2000015}.primary:hover{background:#990000}.secondary{background:white;border-color:#dce1e7;color:#283748}.secondary:hover{background:#f6f8fa}.ghost{background:transparent;color:var(--muted)}.ghost:hover{background:#f2f4f7;color:var(--ink)}.light{background:white;color:var(--ink)}.dark-outline{background:transparent;border-color:#4c5664;color:white}.icon-btn{border:0;background:transparent;color:var(--muted);width:40px;min-width:40px;height:40px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0}.icon-btn:hover{background:#edf0f4}.icon-btn span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.skip-link{position:fixed;left:10px;top:-80px;background:white;padding:15px;z-index:10000}.skip-link:focus{top:10px}
@@ -54,6 +51,22 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 
 .customer-suggestions{display:grid;gap:4px;margin-bottom:10px}.customer-suggestions button{text-align:left;background:#f3f6fc;border:1px solid #dbe3ef;border-radius:8px;padding:10px;min-height:44px}.customer-suggestions small{display:block;color:#586574;margin-top:4px}#customer-hint{margin-bottom:14px}
 .sidebar .nav-item{color:#d3e3f2}.sidebar .nav-item:not(.active):hover{background:#ffffff12}.company-lookup{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px}.company-lookup .field{margin-bottom:0}.company-lookup-status{margin:8px 0 18px}.app-module{overflow:hidden}.module-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:#f4f8fb}.module-frame{display:block;width:100%;height:calc(100vh - 245px);min-height:620px;border:0;background:white}@media(max-width:760px){.company-lookup{grid-template-columns:1fr}.module-frame{height:calc(100dvh - 230px);min-height:520px}.app-module{border-radius:10px}.module-bar{padding:9px}.module-bar strong{display:none}.mobile-nav{justify-content:flex-start;overflow-x:auto}.mobile-nav .nav-item{flex:0 0 72px;min-width:72px}}
+
+/* SPP uses the available viewport instead of a second page heading and tall frame. */
+.spp-shell{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.spp-shell .topbar{height:48px;flex-shrink:0;padding:0 16px}
+.spp-shell .storage-banner,.spp-shell .app-footer{display:none}
+.spp-shell .save-state{display:flex;min-width:0}
+.spp-shell #main-content{display:flex;flex:1;min-height:0;width:100%;max-width:none;margin:0;padding:0}
+.spp-shell .app-module{flex:1;display:flex;border:0;border-radius:0;min-height:0}
+.spp-shell .spp-frame{height:100%;min-height:0;flex:1}
+@media(max-width:760px){
+ .spp-shell{height:calc(100vh - 88px - env(safe-area-inset-bottom));height:calc(100dvh - 88px - env(safe-area-inset-bottom))}
+ .spp-shell .topbar{height:44px;padding:0 10px;gap:6px}
+ .spp-shell .breadcrumb{font-size:10px;white-space:nowrap}
+ .spp-shell .save-state{font-size:8px;max-width:110px;line-height:1.2}
+}
+@media print{.spp-shell{height:auto;overflow:visible}}
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -111,7 +124,7 @@ function render() {
     const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), quotes: () => (0, apps_js_1.embeddedApp)('quotes'), rs2: () => (0, apps_js_1.embeddedApp)('rs2'), spp: () => (0, apps_js_1.sppRevisionPage)(), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), files: () => state.workspace === 'demo' ? '<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>' : (0, cloud_settings_js_1.filesPage)(data, fileQueue.filter(f => f.owner === (0, cloud_js_1.cloudUser)()), fileStatus), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
     const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${(0, ui_js_1.icon)(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
     root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${(0, ui_js_1.icon)('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${(0, ui_js_1.icon)('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${(0, ui_js_1.e)(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${(0, ui_js_1.e)(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell ${state.route === 'spp' ? 'spp-shell' : ''}"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
 }
 (0, manuals_js_1.setManualRefresh)(() => { if (state.route === 'knowledge')
     render(); });
@@ -1144,7 +1157,671 @@ function validateData(input) {
         settings: { technician: str(settings.technician, 'technik', 160), company: str(settings.company, 'firma', 200), baseAddress: str(settings.baseAddress, 'adresa', 400) },
         lastBackup: str(root.lastBackup, 'čas zálohy', 40), ...(root.stocks === undefined ? {} : { stocks: (0, commerce_js_1.validateStocks)(root.stocks) }), ...(root.catalogImportedAt === undefined ? {} : { catalogImportedAt: str(root.catalogImportedAt, 'čas importu', 40) }),
         customers: arr(root.customers, 'zákazníci', o => ({ ...base(o), name: str(o.name, 'meno', 160), company: str(o.company, 'firma', 200), ico: str(o.ico ?? '', 'IČO', 20), dic: str(o.dic ?? '', 'DIČ', 30), icDph: str(o.icDph ?? '', 'IČ DPH', 30), phone: str(o.phone, 'telefón', 60), email: str(o.email, 'e-mail', 200), address: str(o.address, 'adresa', 400), notes: str(o.notes, 'poznámka'), archived: bool(o.archived, 'archív zákazníka') })),
-        devices: arr(root.devices, 'zariadenia', o => ({ ...base(o), customerId: str(o.customerId, 'zákazník', 8…10371 tokens truncated…tId(jobId) {
+        devices: arr(root.devices, 'zariadenia', o => ({ ...base(o), customerId: str(o.customerId, 'zákazník', 80), type: choice(o.type, Object.keys(exports.DEVICE_TYPES), 'typ zariadenia'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), serial: str(o.serial, 'výrobné číslo', 160), location: str(o.location, 'umiestnenie', 400), nextService: date(o.nextService, 'ďalší servis'), notes: str(o.notes, 'poznámka'), archived: bool(o.archived, 'archív zariadenia') })),
+        jobs: arr(root.jobs, 'zákazky', o => ({ ...base(o), ...(o.costing === undefined ? {} : { costing: (0, commerce_js_1.validateLines)(o.costing) }), number: str(o.number, 'číslo zákazky', 40), customerId: str(o.customerId, 'zákazník', 80), deviceId: str(o.deviceId, 'zariadenie', 80), title: str(o.title, 'názov', 200), kind: choice(o.kind, Object.keys(exports.KINDS), 'druh práce'), status: choice(o.status, Object.keys(exports.STATUSES), 'stav zákazky'), start: str(o.start, 'začiatok', 40), duration: num(o.duration, 'dĺžka', 5, 1440), address: str(o.address, 'adresa', 400), issue: str(o.issue, 'problém'), resolution: str(o.resolution, 'riešenie'), result: choice(o.result, ['pending', 'ok', 'fail'], 'technický výsledok'), payment: choice(o.payment, ['unpaid', 'paid'], 'úhrada'), amount: o.amount === null ? null : num(o.amount, 'suma', 0, 1000000), version: num(o.version, 'verzia udalosti', 0, Number.MAX_SAFE_INTEGER) })),
+        tips: arr(root.tips, 'poradňa', o => ({ ...base(o), title: str(o.title, 'názov', 200), category: choice(o.category, ['fault', 'tip', 'regulation'], 'kategória rady'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), code: str(o.code, 'kód', 80), symptoms: str(o.symptoms, 'prejav'), solution: str(o.solution, 'riešenie'), source: str(o.source, 'zdroj', 2000), verification: choice(o.verification, ['draft', 'field', 'manufacturer'], 'overenie'), verifiedAt: date(o.verifiedAt, 'dátum overenia'), jobId: str(o.jobId, 'odkaz na zákazku', 80) }))
+    };
+    if (!Number.isInteger(data.revision))
+        return fail('verzia dát');
+    if (root.attachments !== undefined)
+        data.attachments = arr(root.attachments, 'prílohy', o => ({ ...base(o), name: str(o.name, 'názov súboru', 240), mime: choice(o.mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'], 'typ súboru'), bytes: num(o.bytes, 'veľkosť súboru', 1, 100 * 1024 * 1024), jobId: str(o.jobId, 'zákazka', 80), itemId: str(o.itemId, 'OneDrive súbor', 200), driveAccount: str(o.driveAccount, 'OneDrive účet', 200), manualId: str(o.manualId, 'návod', 80) }));
+    if (root.sppReports !== undefined)
+        data.sppReports = arr(root.sppReports, 'revízne správy SPP', o => ({ ...base(o), reportNo: str(o.reportNo, 'číslo správy SPP', 60), customerId: str(o.customerId, 'zákazník SPP', 80), customerName: str(o.customerName, 'meno zákazníka SPP', 200), address: str(o.address, 'adresa SPP', 500), inspectionDate: date(o.inspectionDate, 'dátum revízie SPP'), state: choice(o.state, ['draft', 'ready', 'issued'], 'stav správy SPP'), payload: str(o.payload, 'obsah správy SPP', 120000) }));
+    for (const a of data.attachments || [])
+        if (a.jobId && !data.jobs.some(j => j.id === a.jobId))
+            return fail('príloha bez zákazky');
+    const all = [...(data.attachments || []), ...(data.sppReports || []), ...data.customers, ...data.devices, ...data.jobs, ...data.tips];
+    if (new Set(all.map(x => x.id)).size !== all.length)
+        return fail('opakované identifikátory');
+    const customers = new Set(data.customers.map(x => x.id));
+    const devices = new Map(data.devices.map(x => [x.id, x]));
+    const jobs = new Set(data.jobs.map(x => x.id));
+    if (new Set(data.jobs.map(x => x.number)).size !== data.jobs.length)
+        return fail('opakované čísla zákaziek');
+    for (const c of data.customers)
+        if (!c.name.trim() && !c.company.trim())
+            return fail('chýbajúce meno zákazníka');
+    for (const d of data.devices) {
+        if (!customers.has(d.customerId))
+            return fail('zariadenie bez zákazníka');
+        if (!d.model.trim())
+            return fail('chýbajúci model');
+    }
+    for (const j of data.jobs) {
+        if (!j.title.trim() || !customers.has(j.customerId) || (j.deviceId && devices.get(j.deviceId)?.customerId !== j.customerId))
+            return fail('väzby zákazky');
+        if (j.start && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(j.start) || !Number.isFinite(Date.parse(j.start)) || new Date(j.start).toISOString() !== j.start))
+            return fail('čas zákazky');
+        if (['planned', 'active'].includes(j.status) && !j.start)
+            return fail('naplánovaná zákazka nemá termín');
+        if (!Number.isInteger(j.version) || !Number.isInteger(j.duration))
+            return fail('verzia alebo dĺžka');
+    }
+    for (const tip of data.tips) {
+        if (!tip.title.trim() || (tip.jobId && !jobs.has(tip.jobId)))
+            return fail('rada bez názvu alebo zákazky');
+        if (tip.source && !safeUrl(tip.source))
+            return fail('zdroj musí byť platný HTTPS odkaz');
+        if (tip.verification !== 'draft' && (!tip.verifiedAt || (tip.category === 'fault' && !tip.model.trim())))
+            return fail('overenie rady vyžaduje dátum a pri poruche model');
+        if (tip.verification === 'manufacturer' && !tip.source)
+            return fail('podklad výrobcu vyžaduje odkaz na zdroj');
+    }
+    for (const report of data.sppReports || []) {
+        if (!report.customerName.trim() || !report.reportNo.trim())
+            return fail('SPP správa bez zákazníka alebo čísla');
+        if (report.customerId && !customers.has(report.customerId))
+            return fail('SPP správa bez zákazníka');
+        try {
+            const parsed = JSON.parse(report.payload);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+                return fail('obsah správy SPP');
+        }
+        catch {
+            return fail('obsah správy SPP');
+        }
+    }
+    return data;
+}
+
+},
+"lib/backup.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.exportBackup = exportBackup;
+exports.importBackup = importBackup;
+exports.download = download;
+const domain_js_1 = require("../domain.js");
+const encoder = new TextEncoder();
+const b64 = (bytes) => { let s = ''; for (const n of bytes)
+    s += String.fromCharCode(n); return btoa(s); };
+const bytes = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function key(password, salt) {
+    const material = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 250000, hash: 'SHA-256' }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function exportBackup(data, password) {
+    const text = JSON.stringify((0, domain_js_1.validateData)(data));
+    if (!password)
+        return text;
+    if (password.length < 10)
+        throw new Error('Heslo zálohy musí mať aspoň 10 znakov.');
+    const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(password, salt), encoder.encode(text));
+    return JSON.stringify({ format: 'spektra-encrypted-v1', salt: b64(salt), iv: b64(iv), content: b64(new Uint8Array(encrypted)) });
+}
+async function importBackup(text, password) {
+    if (encoder.encode(text).length > 25 * 1024 * 1024)
+        throw new Error('Záloha je príliš veľká (maximum 25 MB).');
+    let raw;
+    try {
+        raw = JSON.parse(text);
+    }
+    catch {
+        throw new Error('Súbor nie je platná záloha JSON.');
+    }
+    if (raw && typeof raw === 'object' && 'format' in raw) {
+        const o = raw;
+        if (o.format !== 'spektra-encrypted-v1' || typeof o.salt !== 'string' || typeof o.iv !== 'string' || typeof o.content !== 'string' || !password)
+            throw new Error('Zadajte heslo šifrovanej zálohy.');
+        try {
+            const salt = bytes(o.salt), iv = bytes(o.iv);
+            if (salt.length !== 16 || iv.length !== 12)
+                throw new Error();
+            const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, await key(password, salt), bytes(o.content));
+            raw = JSON.parse(new TextDecoder().decode(plain));
+        }
+        catch {
+            throw new Error('Nesprávne heslo alebo poškodená záloha. Pôvodné údaje zostali nezmenené.');
+        }
+    }
+    return (0, domain_js_1.validateData)(raw);
+}
+function download(name, content, type = 'application/json') {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+},
+"lib/calendar.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.endTime = exports.timeLabel = exports.dateLabel = exports.addDays = exports.today = void 0;
+exports.localDate = localDate;
+exports.toUtc = toUtc;
+exports.conflicts = conflicts;
+exports.googleCalendarUrl = googleCalendarUrl;
+exports.makeIcs = makeIcs;
+const domain_js_1 = require("../domain.js");
+function localDate(iso = new Date().toISOString()) {
+    const parts = new Intl.DateTimeFormat('sv-SE', { timeZone: domain_js_1.ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso));
+    const v = (t) => parts.find(p => p.type === t)?.value || '';
+    return `${v('year')}-${v('month')}-${v('day')}T${v('hour')}:${v('minute')}`;
+}
+const today = () => localDate().slice(0, 10);
+exports.today = today;
+function toUtc(local) {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local))
+        throw new Error('Zadajte platný dátum a čas.');
+    const anchor = Date.parse(local + ':00Z');
+    if (!Number.isFinite(anchor))
+        throw new Error('Neplatný termín.');
+    // Explicit round-trip in Bratislava: rejects a spring gap and ambiguous autumn time.
+    const candidates = [0, 60, 120].map(offset => new Date(anchor - offset * 60000).toISOString()).filter(iso => localDate(iso) === local);
+    if (candidates.length === 0)
+        throw new Error('Tento miestny čas neexistuje (zmena letného času alebo neplatný dátum).');
+    if (candidates.length !== 1)
+        throw new Error('Tento čas je pri zmene letného času nejednoznačný. Vyberte čas po 03:00.');
+    return candidates[0];
+}
+const addDays = (date, days) => new Date(Date.parse(date + 'T12:00:00Z') + days * 86400000).toISOString().slice(0, 10);
+exports.addDays = addDays;
+const dateLabel = (date, options = { day: 'numeric', month: 'long', year: 'numeric' }) => new Intl.DateTimeFormat('sk-SK', { ...options, timeZone: domain_js_1.ZONE }).format(new Date(date.length === 10 ? date + 'T12:00:00Z' : date));
+exports.dateLabel = dateLabel;
+const timeLabel = (iso) => iso ? new Intl.DateTimeFormat('sk-SK', { hour: '2-digit', minute: '2-digit', timeZone: domain_js_1.ZONE }).format(new Date(iso)) : 'Bez termínu';
+exports.timeLabel = timeLabel;
+const endTime = (job) => new Date(Date.parse(job.start) + job.duration * 60000).toISOString();
+exports.endTime = endTime;
+function conflicts(job, others) {
+    if (!job.start || ['done', 'cancelled'].includes(job.status))
+        return [];
+    const start = Date.parse(job.start), end = Date.parse((0, exports.endTime)(job));
+    return others.filter(j => j.id !== job.id && j.start && !['done', 'cancelled'].includes(j.status) && Date.parse(j.start) < end && Date.parse((0, exports.endTime)(j)) > start);
+}
+function googleCalendarUrl(job, customer) {
+    if (!job.start)
+        throw new Error('Najprv nastavte termín.');
+    const compact = (s) => s.replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    return 'https://calendar.google.com/calendar/render?' + new URLSearchParams({ action: 'TEMPLATE', text: `${job.title} — ${customer?.name || customer?.company || ''}`, dates: `${compact(job.start)}/${compact((0, exports.endTime)(job))}`, ctz: domain_js_1.ZONE, location: job.address, details: `Spektra Servis • ${job.number}\n${job.issue}\n\nRučný prenos z aplikácie. Zmeny sa nesynchronizujú automaticky.` }).toString();
+}
+const escapeIcs = (s) => s.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r/g, '');
+function fold(line) { let result = '', row = '', count = 0; for (const ch of line) {
+    const bytes = new TextEncoder().encode(ch).length;
+    if (count + bytes > 74) {
+        result += row + '\r\n';
+        row = ' ';
+        count = 1;
+    }
+    row += ch;
+    count += bytes;
+} return result + row; }
+function makeIcs(jobs, customers, now = new Date().toISOString()) {
+    const compact = (s) => s.replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Spektra Install//Servis 0.1//SK', 'CALSCALE:GREGORIAN'];
+    for (const j of jobs.filter(j => j.start && j.status !== 'cancelled')) {
+        const customer = customers.find(c => c.id === j.customerId);
+        lines.push('BEGIN:VEVENT', `UID:${j.id}@spektra-servis.local`, `SEQUENCE:${j.version}`, `DTSTAMP:${compact(now)}`, `DTSTART:${compact(j.start)}`, `DTEND:${compact((0, exports.endTime)(j))}`, `SUMMARY:${escapeIcs(j.title + ' — ' + (customer?.name || customer?.company || ''))}`, `LOCATION:${escapeIcs(j.address)}`, `DESCRIPTION:${escapeIcs(j.number + '\n' + j.issue + '\nRučný export; bez spätnej synchronizácie.')}`, 'BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', 'DESCRIPTION:Servisný výjazd Spektra', 'END:VALARM', 'END:VEVENT');
+    }
+    lines.push('END:VCALENDAR');
+    return lines.map(fold).join('\r\n') + '\r\n';
+}
+
+},
+"lib/cloud.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.cloudState = void 0;
+exports.cloudUser = cloudUser;
+exports.initCloud = initCloud;
+exports.loginCloud = loginCloud;
+exports.logoutCloud = logoutCloud;
+exports.enableCloud = enableCloud;
+exports.synchronize = synchronize;
+const domain_js_1 = require("../domain.js");
+const sync_merge_js_1 = require("./sync-merge.js");
+const store_js_1 = require("./store.js");
+let client, pending;
+let user = null;
+exports.cloudState = { email: '', enabled: false, status: 'Synchronizácia nie je pripojená', conflicts: [] };
+function cloudUser() { return user?.id || ''; }
+async function sdk() {
+    if (client)
+        return client;
+    if (pending)
+        return pending;
+    pending = (async () => {
+        if (!window.supabase)
+            await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = './vendor/supabase.js'; const t = setTimeout(() => reject(Error('Prihlásenie sa nenačítalo. Skúste znova online.')), 20000); s.onload = () => { clearTimeout(t); resolve(); }; s.onerror = () => { clearTimeout(t); reject(Error('Prihlásenie sa nenačítalo.')); }; document.head.append(s); });
+        if (!window.supabase)
+            throw Error('Knižnica prihlásenia nie je dostupná.');
+        client = window.supabase.createClient('https://rrakzoicawqbcpnzavet.supabase.co', 'sb_publishable_ZZOAMeOcSHS6IGghKIu1lA_xss5sJzK', { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'spektra-servis-auth' }, global: { fetch: (url, init) => fetch(url, { ...init, signal: init?.signal || AbortSignal.timeout(20000) }) } });
+        client.auth.onAuthStateChange((_event, session) => { user = session?.user || null; exports.cloudState.email = user?.email || ''; if (!user)
+            exports.cloudState.enabled = false; });
+        return client;
+    })();
+    try {
+        return await pending;
+    }
+    finally {
+        pending = undefined;
+    }
+}
+async function initCloud() { const c = await sdk(); const { data } = await c.auth.getSession(); user = data.session?.user || null; exports.cloudState.email = user?.email || ''; const m = await (0, store_js_1.loadSyncMeta)(); exports.cloudState.enabled = !!user && m?.owner === user.id && m.enabled; exports.cloudState.status = exports.cloudState.enabled ? 'Čaká na synchronizáciu' : user ? 'Zapnite synchronizáciu tohto zariadenia' : 'Prihláste sa účtom Cenových ponúk'; }
+async function loginCloud(email, password) { const c = await sdk(); const { data, error } = await c.auth.signInWithPassword({ email, password }); if (error || !data.user)
+    throw Error('Prihlásenie sa nepodarilo. Použite e-mail a heslo z Cenových ponúk.'); user = data.user; exports.cloudState.email = user.email || ''; const m = await (0, store_js_1.loadSyncMeta)(); if (m && m.owner !== user.id) {
+    await c.auth.signOut({ scope: 'local' });
+    user = null;
+    throw Error('Toto zariadenie je prepojené s iným účtom. Prihláste sa pôvodným účtom; miestne údaje neboli prenesené.');
+} exports.cloudState.enabled = !!m?.enabled; exports.cloudState.status = exports.cloudState.enabled ? 'Čaká na synchronizáciu' : 'Prihlásené; zapnite synchronizáciu zariadenia'; }
+async function logoutCloud() { await (await sdk()).auth.signOut({ scope: 'local' }); user = null; exports.cloudState.email = ''; exports.cloudState.enabled = false; exports.cloudState.status = 'Odhlásené · údaje zostávajú v zariadení'; }
+async function enableCloud() { if (!user)
+    throw Error('Najskôr sa prihláste.'); const local = await (0, store_js_1.load)('real'), m = await (0, store_js_1.loadSyncMeta)(); if (m && m.owner !== user.id)
+    throw Error('Zariadenie patrí inému účtu.'); if (!m)
+    await (0, store_js_1.recoverySnapshot)(local); const result = await (0, store_js_1.save)('real', local, local.revision, { owner: user.id, base: m?.base || (0, sync_merge_js_1.initialBase)(), remoteRevision: m?.remoteRevision || 0, enabled: true }); exports.cloudState.enabled = true; return result; }
+function contactKeys(c) {
+    const keys = [];
+    const name = (0, domain_js_1.normalize)(c.name || c.company || ''), phone = (0, domain_js_1.customerPhoneKey)(c.phone || ''), email = (c.email || '').trim().toLowerCase(), address = (0, domain_js_1.normalize)(c.address || '');
+    if (name && phone.length >= 7)
+        keys.push('np:' + name + '|' + phone);
+    if (name && email.includes('@'))
+        keys.push('ne:' + name + '|' + email);
+    if (name && !phone && !email && address)
+        keys.push('na:' + name + '|' + address);
+    return keys;
+}
+async function reconcileSharedCustomers(input) {
+    if (!user)
+        return input;
+    const c = await sdk();
+    const { data: rows, error } = await c.from('customers').select('id,name,company,ico,dic,ic_dph,phone,email,address,notes,archived,created_at,updated_at');
+    if (error)
+        throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
+    const next = structuredClone(input), byKey = new Map();
+    for (const row of rows || [])
+        for (const key of contactKeys({ name: row.name || '', company: row.company || '', phone: row.phone || '', email: row.email || '', address: row.address || '' }))
+            if (!byKey.has(key))
+                byKey.set(key, row);
+    for (const local of [...next.customers]) {
+        const remote = (rows || []).find((row) => row.id === local.id) || contactKeys(local).map(key => byKey.get(key)).find(Boolean);
+        if (remote && remote.id !== local.id) {
+            for (const d of next.devices)
+                if (d.customerId === local.id)
+                    d.customerId = remote.id;
+            for (const j of next.jobs)
+                if (j.customerId === local.id)
+                    j.customerId = remote.id;
+            for (const report of next.sppReports || [])
+                if (report.customerId === local.id)
+                    report.customerId = remote.id;
+            local.id = remote.id;
+        }
+        if (remote && Date.parse(remote.updated_at || '') > Date.parse(local.updatedAt || ''))
+            Object.assign(local, { name: remote.name || '', company: remote.company || '', ico: remote.ico || '', dic: remote.dic || '', icDph: remote.ic_dph || '', phone: remote.phone || '', email: remote.email || '', address: remote.address || '', notes: remote.notes || '', archived: !!remote.archived, createdAt: remote.created_at || local.createdAt, updatedAt: remote.updated_at || local.updatedAt });
+    }
+    for (const remote of rows || [])
+        if (!next.customers.some(x => x.id === remote.id))
+            next.customers.push({ id: remote.id, name: remote.name || '', company: remote.company || '', ico: remote.ico || '', dic: remote.dic || '', icDph: remote.ic_dph || '', phone: remote.phone || '', email: remote.email || '', address: remote.address || '', notes: remote.notes || '', archived: !!remote.archived, createdAt: remote.created_at || new Date().toISOString(), updatedAt: remote.updated_at || new Date().toISOString() });
+    // Several local contacts may resolve to the same shared customer ID.
+    // Collapse them before UPSERT and before saving the synchronized workspace.
+    const unique = new Map();
+    for (const contact of next.customers) {
+        const previous = unique.get(contact.id);
+        if (!previous) {
+            unique.set(contact.id, contact);
+            continue;
+        }
+        const newer = Date.parse(contact.updatedAt) > Date.parse(previous.updatedAt) ? contact : previous;
+        const older = newer === contact ? previous : contact;
+        const merged = { ...older, ...newer };
+        for (const key of ['name', 'company', 'ico', 'dic', 'icDph', 'phone', 'email', 'address'])
+            if (!merged[key])
+                merged[key] = older[key] || '';
+        merged.notes = [...new Set([older.notes, newer.notes].filter(Boolean))].join('\n');
+        merged.createdAt = older.createdAt < newer.createdAt ? older.createdAt : newer.createdAt;
+        unique.set(contact.id, merged);
+    }
+    next.customers = [...unique.values()];
+    const payload = next.customers.map(x => ({ id: x.id, name: x.name || x.company || 'Bez mena', company: x.company || null, ico: x.ico || null, dic: x.dic || null, ic_dph: x.icDph || null, phone: x.phone || null, email: x.email || null, address: x.address || null, notes: x.notes || null, archived: x.archived, created_at: x.createdAt, updated_at: x.updatedAt, updated_by: user.id, source_app: 'servis' }));
+    if (payload.length) {
+        const written = await c.from('customers').upsert(payload, { onConflict: 'id' });
+        if (written.error)
+            throw Error('Spoločný adresár sa nepodarilo uložiť. Miestne údaje zostali zachované.');
+    }
+    return next;
+}
+/** Persist remote baseline and local result in ONE transaction: crash/retry cannot lose pending edits. */
+async function synchronize(choice) {
+    if (!exports.cloudState.enabled || !user)
+        return;
+    if (!navigator.onLine) {
+        exports.cloudState.status = 'Offline · zmeny čakajú v zariadení';
+        return;
+    }
+    const owner = user.id, c = await sdk();
+    const meta = await (0, store_js_1.loadSyncMeta)();
+    if (!meta || meta.owner !== owner || !meta.enabled)
+        return;
+    const local = await (0, store_js_1.load)('real');
+    exports.cloudState.status = 'Synchronizujem…';
+    let result = await c.from('servis_sync').select('revision').eq('user_id', owner).maybeSingle();
+    if (!result.error && result.data) {
+        if (Number(result.data.revision) === meta.remoteRevision)
+            result = { ...result, data: { ...result.data, payload: meta.base } };
+        else
+            result = await c.from('servis_sync').select('revision,payload').eq('user_id', owner).maybeSingle();
+    }
+    if (result.error)
+        throw Error('Cloud nie je dostupný. Miestne zmeny zostali uložené.');
+    if (user?.id !== owner)
+        throw Error('Účet sa zmenil počas synchronizácie.');
+    const remote = result.data ? (0, domain_js_1.validateData)(result.data.payload) : (0, sync_merge_js_1.initialBase)(), revision = Number(result.data?.revision || 0);
+    const merged = (0, sync_merge_js_1.mergeData)(meta.base, local, remote, choice);
+    exports.cloudState.conflicts = merged.conflicts;
+    if (merged.conflicts.length && !choice) {
+        exports.cloudState.status = 'Konflikt úprav · vyberte verziu v Nastaveniach';
+        return;
+    }
+    if (choice)
+        await (0, store_js_1.recoverySnapshot)(local);
+    merged.data = await reconcileSharedCustomers(merged.data);
+    let remoteRevision = revision;
+    if (!result.data || !(0, sync_merge_js_1.equal)((0, sync_merge_js_1.syncPayload)(merged.data), (0, sync_merge_js_1.syncPayload)(remote))) {
+        const sent = await c.rpc('servis_sync_write', { expected_revision: revision, new_payload: (0, sync_merge_js_1.syncPayload)(merged.data) });
+        if (sent.error)
+            throw Error('Zmeny sa nepodarilo odoslať. Zostali v zariadení a prenos sa zopakuje.');
+        if (!sent.data) {
+            exports.cloudState.status = 'Druhé zariadenie práve ukladá; prenos zopakujem';
+            return;
+        }
+        remoteRevision = Number(sent.data);
+    }
+    if (user?.id !== owner)
+        throw Error('Účet sa zmenil počas synchronizácie.');
+    const m = { ...meta, base: (0, sync_merge_js_1.syncPayload)(merged.data), remoteRevision };
+    // Another tab may save while the network is in flight. CAS rejects and retries without discarding its changes.
+    let saved;
+    if (remoteRevision !== meta.remoteRevision || !(0, sync_merge_js_1.equal)((0, sync_merge_js_1.syncPayload)(local), (0, sync_merge_js_1.syncPayload)(merged.data)))
+        saved = await (0, store_js_1.save)('real', merged.data, local.revision, m);
+    exports.cloudState.conflicts = [];
+    exports.cloudState.status = 'Synchronizované · ' + new Date().toLocaleTimeString('sk-SK');
+    return saved;
+}
+
+},
+"lib/commerce.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.APPS = void 0;
+exports.validateStocks = validateStocks;
+exports.mapStocks = mapStocks;
+exports.validateLines = validateLines;
+exports.totals = totals;
+exports.openIntegration = openIntegration;
+const text = (v, max = 400) => { if (typeof v !== 'string' || v.length > max)
+    throw Error('Neplatný text položky.'); return v; };
+const num = (v, max = 1000000) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max)
+    throw Error('Neplatná cena alebo množstvo.'); return v; };
+const optional = (v) => v === null || v === undefined || v === '' ? null : num(Number(v));
+function validateStocks(value) {
+    if (!Array.isArray(value) || value.length > 20000)
+        throw Error('Neplatný sklad.');
+    const rows = value.map((s) => ({ id: text(s.id, 100), code: text(s.code), name: text(s.name), unit: text(s.unit, 40), sale: s.sale === null ? null : num(s.sale), cost: s.cost === null ? null : num(s.cost), vat: s.vat === null ? null : num(s.vat, 100), available: s.available === null ? null : (typeof s.available === 'number' && Number.isFinite(s.available) && Math.abs(s.available) <= 1000000 ? s.available : (() => { throw Error('Neplatný stav skladu.'); })()), syncedAt: text(s.syncedAt, 40) }));
+    if (rows.some(s => !s.id || !s.name) || new Set(rows.map(s => s.id)).size !== rows.length)
+        throw Error('Sklad obsahuje chýbajúce alebo duplicitné karty.');
+    return rows;
+}
+function mapStocks(value) {
+    if (!Array.isArray(value))
+        throw Error('Chýba zoznam skladu.');
+    return validateStocks(value.filter(s => s.active !== false).map(s => { const sale = optional(s.sell_price_ex_vat), gross = optional(s.sell_price_inc_vat); const rate = sale !== null && sale >= 1 && gross !== null ? Math.round((gross / sale - 1) * 100) : null; return { id: String(s.id || s.fingerprint || ''), code: String(s.code || s.plu || ''), name: String(s.name || ''), unit: String(s.unit || 'ks'), sale, cost: optional(s.purchase_price_ex_vat), vat: rate !== null && rate >= 0 && rate <= 100 ? rate : null, available: s.quantity_available == null ? null : Number(s.quantity_available), syncedAt: String(s.synced_at || '') }; }));
+}
+function validateLines(value) {
+    if (!Array.isArray(value) || value.length > 500)
+        throw Error('Neplatná kalkulácia.');
+    return value.map(s => { if (!['material', 'labor', 'transport'].includes(s.kind))
+        throw Error('Neplatný druh položky.'); return { id: text(s.id, 100), stockId: text(s.stockId, 100), code: text(s.code), name: text(s.name), unit: text(s.unit, 40), kind: s.kind, qty: num(s.qty), sale: num(s.sale), cost: s.cost === null ? null : num(s.cost), vat: num(s.vat, 100) }; });
+}
+// Match Cenové ponuky: quantity at 3 decimals, price at 4 decimals;
+// round net once per VAT rate and VAT from that rounded net.
+function totals(lines) {
+    const groups = new Map();
+    let costs = 0n;
+    for (const l of lines) {
+        const qty = BigInt(Math.round(l.qty * 1000));
+        groups.set(l.vat, (groups.get(l.vat) || 0n) + BigInt(Math.round(l.sale * 10000)) * qty);
+        costs += BigInt(Math.round((l.cost ?? 0) * 10000)) * qty;
+    }
+    let net = 0n, vat = 0n;
+    for (const [rate, scaled] of groups) {
+        const n = (scaled + 50000n) / 100000n;
+        net += n;
+        vat += (n * BigInt(Math.round(rate * 100)) + 5000n) / 10000n;
+    }
+    const cost = (costs + 50000n) / 100000n, known = lines.every(l => l.cost !== null);
+    return { net: Number(net) / 100, vat: Number(vat) / 100, gross: Number(net + vat) / 100, cost: known ? Number(cost) / 100 : null, profit: known ? Number(net - cost) / 100 : null };
+}
+exports.APPS = { quotes: 'https://cenov-ponuky.vercel.app/mobile-v4/app.html', rs2: 'https://rs-2-peach.vercel.app/' };
+function openIntegration(target, operation, payload) {
+    const nonce = crypto.randomUUID(), url = new URL(exports.APPS[target]);
+    url.searchParams.set('spektraBridge', nonce);
+    const popup = window.open(url.href, 'spektra-' + nonce, 'popup=false');
+    if (!popup)
+        return Promise.reject(Error('Povoľte otvorenie nového okna pre prepojenie aplikácií.'));
+    return new Promise((resolve, reject) => {
+        let sent = false;
+        const cleanup = () => { clearTimeout(timeout); clearInterval(poll); window.removeEventListener('message', receive); };
+        const timeout = setTimeout(() => { cleanup(); reject(Error('Prepojenie vypršalo. Prihláste sa v otvorenej aplikácii a skúste prenos znova.')); }, 300000);
+        const poll = setInterval(() => { if (popup.closed) {
+            cleanup();
+            reject(Error('Okno prepojenia bolo zatvorené.'));
+        } }, 1000);
+        function receive(event) {
+            if (event.origin !== url.origin || event.source !== popup || event.data?.nonce !== nonce)
+                return;
+            if (event.data.type === 'spektra-ready' && !sent) {
+                sent = true;
+                popup.postMessage({ type: 'spektra-request', nonce, operation, payload }, url.origin);
+            }
+            if (event.data.type === 'spektra-result') {
+                cleanup();
+                if (event.data.error)
+                    reject(Error(String(event.data.error)));
+                else
+                    resolve(event.data.payload);
+            }
+        }
+        window.addEventListener('message', receive);
+    });
+}
+
+},
+"lib/company-register.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.companyByIco = companyByIco;
+const text = (value) => typeof value === 'string' ? value.trim() : '';
+async function companyByIco(raw) {
+    const ico = raw.replace(/\D/g, '');
+    if (!/^\d{6,8}$/.test(ico))
+        throw Error('IČO musí obsahovať 6 až 8 číslic.');
+    const response = await fetch('https://api.subjekt.sk/v1/entity/' + encodeURIComponent(ico) + '?country=sk', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+    if (response.status === 404)
+        throw Error('Firma s týmto IČO sa nenašla.');
+    if (!response.ok)
+        throw Error('Register firiem je dočasne nedostupný. Skúste znova alebo údaje vyplňte ručne.');
+    const rawData = await response.json();
+    const data = (rawData.data && typeof rawData.data === 'object' ? rawData.data : rawData);
+    const place = data.address && typeof data.address === 'object' ? data.address : {};
+    const street = [text(place.street), text(place.building_no) || text(place.number)].filter(Boolean).join(' ');
+    const town = [text(place.zip) || text(place.postal_code), text(place.city)].filter(Boolean).join(' ');
+    const address = text(data.formatted_address) || text(place.formatted) || [street, town].filter(Boolean).join(', ');
+    const name = text(data.name) || text(data.business_name) || text(data.legal_name);
+    if (!name)
+        throw Error('Register vrátil neúplný záznam. Údaje vyplňte ručne.');
+    return { name, ico: text(data.ico) || ico, dic: text(data.dic) || text(data.tax_id), icDph: text(data.ic_dph) || text(data.vat_id), address };
+}
+
+},
+"lib/file-queue.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.queuedFiles = queuedFiles;
+exports.queueFile = queueFile;
+exports.fileType = fileType;
+function db() { return new Promise((resolve, reject) => { const r = indexedDB.open('spektra-file-queue-v1', 1); r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'id' }); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); }
+async function queuedFiles() { const d = await db(); return new Promise((resolve, reject) => { const t = d.transaction('files'), r = t.objectStore('files').getAll(); t.oncomplete = () => { d.close(); resolve(r.result); }; t.onerror = () => { d.close(); reject(t.error); }; }); }
+async function queueFile(file) { const d = await db(); return new Promise((resolve, reject) => { const t = d.transaction('files', 'readwrite'), s = t.objectStore('files'); if (typeof file === 'string')
+    s.delete(file);
+else
+    s.put(file); t.oncomplete = () => { d.close(); resolve(); }; t.onerror = t.onabort = () => { d.close(); reject(Error('Súbor sa neuložil v zariadení. Skontrolujte voľné miesto.')); }; }); }
+async function fileType(file, name) {
+    if (!file.size || file.size > 100 * 1024 * 1024)
+        throw Error('Príloha musí mať 1 B až 100 MB.');
+    const b = new Uint8Array(await file.slice(0, 16).arrayBuffer()), s = String.fromCharCode(...b);
+    if (s.startsWith('%PDF-'))
+        return 'application/pdf';
+    if (b[0] === 255 && b[1] === 216 && b[2] === 255)
+        return 'image/jpeg';
+    if (b[0] === 137 && s.slice(1, 4) === 'PNG')
+        return 'image/png';
+    if (s.startsWith('RIFF') && s.slice(8, 12) === 'WEBP')
+        return 'image/webp';
+    if (s.slice(4, 8) === 'ftyp' && ['heic', 'heix', 'hevc', 'hevx', 'mif1'].includes(s.slice(8, 12)))
+        return 'image/heic';
+    throw Error('Podporované sú PDF a fotografie JPG, PNG, WebP alebo HEIC: ' + name);
+}
+
+},
+"lib/google-calendar.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.googleClientId = googleClientId;
+exports.googleState = googleState;
+exports.disconnectGoogle = disconnectGoogle;
+exports.saveGoogleClientId = saveGoogleClientId;
+exports.prepareGoogle = prepareGoogle;
+exports.googleRequest = googleRequest;
+exports.connectGoogle = connectGoogle;
+exports.selectGoogleCalendar = selectGoogleCalendar;
+exports.googleEventId = googleEventId;
+exports.googleEventBody = googleEventBody;
+exports.assertOwnedEvent = assertOwnedEvent;
+exports.syncGoogleJob = syncGoogleJob;
+const domain_js_1 = require("../domain.js");
+const calendar_js_1 = require("./calendar.js");
+const SCOPES = ['https://www.googleapis.com/auth/calendar.events.owned', 'https://www.googleapis.com/auth/calendar.calendarlist.readonly'];
+const KEY = 'spektra-google-client-id';
+let token = '', expires = 0, scriptPromise, connecting = false;
+let calendars = [], selected = '', account = '', syncing = false;
+function googleClientId() { try {
+    return localStorage.getItem(KEY) || '';
+}
+catch {
+    return '';
+} }
+function googleState() { return { connected: !!token && Date.now() < expires, calendars, selected, account, syncing }; }
+function disconnectGoogle() { token = ''; expires = 0; calendars = []; selected = ''; account = ''; }
+async function saveGoogleClientId(value) {
+    value = value.trim();
+    if (!/^\d+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(value))
+        throw new Error('Vložte Google OAuth Client ID pre webovú aplikáciu, nie tajný kľúč.');
+    if (syncing || connecting)
+        throw new Error('Počkajte na dokončenie operácie.');
+    localStorage.setItem(KEY, value);
+    disconnectGoogle();
+    await prepareGoogle();
+}
+function prepareGoogle() {
+    if (window.google?.accounts.oauth2)
+        return Promise.resolve();
+    if (!scriptPromise)
+        scriptPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            const timeout = setTimeout(() => { script.remove(); scriptPromise = undefined; reject(new Error('Google sa nenačítal. Skontrolujte internet a blokovanie skriptov.')); }, 15000);
+            script.onload = () => { clearTimeout(timeout); resolve(); };
+            script.onerror = () => { clearTimeout(timeout); script.remove(); scriptPromise = undefined; reject(new Error('Google prihlásenie sa nepodarilo načítať.')); };
+            document.head.append(script);
+        });
+    return scriptPromise;
+}
+async function googleRequest(path, method = 'GET', body, etag) {
+    if (!token || Date.now() >= expires) {
+        disconnectGoogle();
+        throw new Error('Pripojenie vypršalo. V nastaveniach sa znova pripojte ku Google.');
+    }
+    const response = await fetch('https://www.googleapis.com/calendar/v3/' + path, { method, headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(etag ? { 'If-Match': etag } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    if (response.status === 401) {
+        disconnectGoogle();
+        throw new Error('Google prístup vypršal. Pripojte účet znova.');
+    }
+    if (response.status === 404 && method === 'GET')
+        return null;
+    if (!response.ok) {
+        const messages = { 403: 'Google odmietol prístup. Overte zapnutie Calendar API a udelené oprávnenia.', 409: 'Udalosť už vznikla v inom okne. Zopakujte prenos; nevytvárajte ručnú kópiu.', 410: 'Udalosť bola v Google odstránená. Obnovte ju v Google alebo vytvorte novú zákazku.', 412: 'Udalosť medzitým zmenil iný používateľ alebo zariadenie. Zopakujte kontrolu a prenos.', 429: 'Google dočasne obmedzil počet požiadaviek. Skúste prenos neskôr.' };
+        throw new Error(messages[response.status] || 'Google Kalendár nie je dostupný (HTTP ' + response.status + '). Skúste znova.');
+    }
+    return response.status === 204 ? null : response.json();
+}
+function connectGoogle() {
+    if (connecting || syncing)
+        return Promise.reject(new Error('Počkajte na dokončenie operácie.'));
+    const clientId = googleClientId(), identity = window.google?.accounts.oauth2;
+    if (!clientId)
+        return Promise.reject(new Error('Najskôr nastavte Google OAuth Client ID.'));
+    if (!identity) {
+        void prepareGoogle().catch(() => { });
+        return Promise.reject(new Error('Načítavam Google prihlásenie. O chvíľu kliknite Pripojiť Google znova.'));
+    }
+    disconnectGoogle();
+    connecting = true;
+    return new Promise((resolve, reject) => {
+        let done = false;
+        const finish = (error) => { if (done)
+            return; done = true; clearTimeout(timeout); connecting = false; if (error) {
+            disconnectGoogle();
+            reject(error);
+        }
+        else
+            resolve(); };
+        const timeout = setTimeout(() => finish(new Error('Prihlásenie nebolo dokončené. Skúste znova.')), 120000);
+        const client = identity.initTokenClient({ client_id: clientId, scope: SCOPES.join(' '), include_granted_scopes: false,
+            callback: async (response) => {
+                if (done)
+                    return;
+                if (response.error || !response.access_token || !identity.hasGrantedAllScopes(response, ...SCOPES)) {
+                    finish(new Error('Google prístup nebol povolený pre obe potrebné oprávnenia.'));
+                    return;
+                }
+                token = response.access_token;
+                expires = Date.now() + Math.max(0, Number(response.expires_in || 0) - 60) * 1000;
+                try {
+                    let next = '';
+                    const found = [];
+                    do {
+                        const result = await googleRequest('users/me/calendarList?minAccessRole=owner&maxResults=250' + (next ? '&pageToken=' + encodeURIComponent(next) : ''));
+                        found.push(...(result.items || []));
+                        next = result.nextPageToken || '';
+                    } while (next);
+                    if (done)
+                        return;
+                    calendars = found.filter(c => c.accessRole === 'owner');
+                    account = calendars.find(c => c.primary)?.id || 'Pripojený Google účet';
+                    selected = '';
+                    finish();
+                }
+                catch (error) {
+                    finish(error instanceof Error ? error : new Error('Kalendáre sa nenačítali.'));
+                }
+            }, error_callback: () => finish(new Error('Prihlasovacie okno bolo zatvorené alebo zablokované. Povoľte vyskakovacie okno pre Spektra Servis.')) });
+        client.requestAccessToken({ prompt: 'select_account' });
+    });
+}
+function selectGoogleCalendar(id) {
+    if (syncing)
+        throw new Error('Počkajte na dokončenie prenosu.');
+    if (!calendars.some(c => c.id === id))
+        throw new Error('Vyberte jeden z pripojených kalendárov.');
+    selected = id;
+}
+async function googleEventId(jobId) {
     const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('spektra-servis-v1:' + jobId));
     return 'ss' + Array.from(new Uint8Array(hash), x => x.toString(16).padStart(2, '0')).join('');
 }
@@ -1569,7 +2246,7 @@ function embeddedApp(kind) {
     return (0, ui_js_1.heading)('SPEKTRA · JEDNA APLIKÁCIA', title, kind === 'quotes' ? 'Tvorba ponúk, obhliadky a PDF dokumenty.' : 'Revízne správy a spoločný adresár zákazníkov.') + `<section class="panel app-module"><div class="module-bar"><strong>${(0, ui_js_1.e)(title)}</strong><a class="btn secondary" href="${(0, ui_js_1.e)(commerce_js_1.APPS[kind])}" target="_blank" rel="noopener noreferrer">Otvoriť na celej obrazovke</a></div><iframe class="module-frame" src="${(0, ui_js_1.e)(commerce_js_1.APPS[kind])}" title="${(0, ui_js_1.e)(title)}" loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe></section>`;
 }
 function sppRevisionPage() {
-    return (0, ui_js_1.heading)('SPEKTRA · JEDNA APLIKÁCIA', 'SPP – revízne správy', 'HTML formulár podľa poslednej Excel revízie: SOPAS, tlaková skúška, automatické kontroly, evidencia a PDF.') + `<section class="panel app-module"><iframe class="module-frame spp-frame" src="./spp-app.html" title="SPP – revízne správy" loading="eager" referrerpolicy="same-origin"></iframe></section>`;
+    return `<section class="panel app-module"><iframe class="module-frame spp-frame" src="./spp-app.html" title="SPP – revízne správy" loading="eager" referrerpolicy="same-origin"></iframe></section>`;
 }
 
 },

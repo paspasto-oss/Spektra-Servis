@@ -6,5 +6,5 @@ export function embeddedApp(kind:'quotes'|'rs2'):string{
 }
 
 export function sppRevisionPage():string{
- return heading('SPEKTRA · JEDNA APLIKÁCIA','SPP – revízne správy','HTML formulár podľa poslednej Excel revízie: SOPAS, tlaková skúška, automatické kontroly, evidencia a PDF.')+`<section class="panel app-module"><iframe class="module-frame spp-frame" src="./spp-app.html" title="SPP – revízne správy" loading="eager" referrerpolicy="same-origin"></iframe></section>`;
+ return `<section class="panel app-module"><iframe class="module-frame spp-frame" src="./spp-app.html" title="SPP – revízne správy" loading="eager" referrerpolicy="same-origin"></iframe></section>`;
 }
