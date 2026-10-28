@@ -31,16 +31,22 @@ let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'cus
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
-let oneDriveBusy=false, syncBusy=false, fileBusy=false;
+let oneDriveBusy=false, syncBusy=false, fileBusy=false, sppDirty=false;
 let fileQueue:PendingFile[]=[],fileStatus='';
 let integrationBusy=false, costJobId='', costRevision=0, costLines:CostLine[]=[];
 let pendingEditor: { type: EditorType; extra: Partial<Editor> } | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
 function message(text: string, error = false): void { toastElement.textContent = text; toastElement.className = 'toast visible' + (error ? ' error' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => toastElement.className = 'toast', error ? 8000 : 4500); }
 function fail(err: unknown): void { const text = err instanceof Error ? err.message : 'Operácia sa nepodarila.'; if (dialog.open) { const el = dialog.querySelector<HTMLElement>('#form-error'); if (el) { el.textContent = text; el.hidden = false; el.scrollIntoView({ block: 'nearest' }); } } message(text, true); }
-function nav(route: string): void { state.route = route; state.query = ''; state.filter = ''; if (route !== 'jobs') state.selectedCustomer = ''; location.hash = route; render(); window.scrollTo({ top: 0 }); }
+function nav(route: string): void { if(sppDirty&&route!==state.route&&!confirm('SPP správa obsahuje neuložené zmeny. Opustiť ju bez uloženia?'))return; sppDirty=false; state.route = route; state.query = ''; state.filter = ''; if (route !== 'jobs') state.selectedCustomer = ''; location.hash = route; render(); window.scrollTo({ top: 0 }); }
 function render(): void {
   if (!ready) return;
+  const sppFrame=document.querySelector<HTMLIFrameElement>('.spp-frame');
+  if(state.route==='spp'&&sppFrame){
+    sppFrame.contentWindow?.postMessage({type:'spp-state',customers:data.customers.filter(c=>!c.archived),reports:data.sppReports||[],settings:data.settings},location.origin);
+    showSyncStatus();return;
+  }
+  sppDirty=false;
   const pages: Record<string, () => string> = { home: () => dashboard(data), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), quotes:()=>embeddedApp('quotes'), rs2:()=>embeddedApp('rs2'), spp:()=>sppRevisionPage(), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), files:()=>state.workspace==='demo'?'<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>':filesPage(data,fileQueue.filter(f=>f.owner===cloudUser()),fileStatus), settings: () => settingsPage(data, state.workspace === 'demo') };
   const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
   root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${icon('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${icon('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${e(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${e(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
@@ -297,21 +303,23 @@ document.addEventListener('change', event => {
   }
   if (el.id === 'job-device') { const address = dialog.querySelector<HTMLInputElement>('[name=address]'), device = data.devices.find(d => d.id === el.value); if (address && device?.location) address.value = device.location; }
 });
-window.addEventListener('hashchange', () => { const route = location.hash.slice(1); if (route && state.route !== route) { if (dialog.open && !closeEditor()) { history.replaceState(null, '', '#' + state.route); return; } state.route = routes.some(r => r[0] === route) || route === 'settings' ? route : 'home'; state.query = ''; state.filter = ''; state.selectedCustomer = ''; render(); } });
-window.addEventListener('beforeunload', event => { if (dirty || busy || oneDriveBusy || fileBusy || syncBusy) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('hashchange', () => { const route = location.hash.slice(1); if (route && state.route !== route) { if(sppDirty&&!confirm('SPP správa obsahuje neuložené zmeny. Opustiť ju bez uloženia?')){history.replaceState(null,'','#'+state.route);return;} sppDirty=false; if (dialog.open && !closeEditor()) { history.replaceState(null, '', '#' + state.route); return; } state.route = routes.some(r => r[0] === route) || route === 'settings' ? route : 'home'; state.query = ''; state.filter = ''; state.selectedCustomer = ''; render(); } });
+window.addEventListener('beforeunload', event => { if (dirty || sppDirty || busy || oneDriveBusy || fileBusy || syncBusy) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('online', render); window.addEventListener('offline', render);
 window.addEventListener('message',event=>{
  const frame=document.querySelector<HTMLIFrameElement>('.spp-frame');
  if(event.origin!==location.origin||event.source!==frame?.contentWindow||!event.data||typeof event.data!=='object')return;
  const reply=(payload:unknown)=>frame.contentWindow?.postMessage(payload,location.origin);
+ const sppFail=(error:unknown)=>{reply({type:'spp-error',message:error instanceof Error?error.message:'Operácia SPP sa nepodarila.'});fail(error);};
+ if(event.data.type==='spp-dirty'){sppDirty=!!event.data.dirty;return;}
  if(event.data.type==='spp-ready'){reply({type:'spp-state',customers:data.customers.filter(c=>!c.archived),reports:data.sppReports||[],settings:data.settings});return;}
  if(event.data.type==='spp-lookup-company'){void companyByIco(String(event.data.ico||'')).then(company=>reply({type:'spp-company',company})).catch(error=>reply({type:'spp-error',message:error instanceof Error?error.message:'Firma sa nenašla.'}));return;}
  if(event.data.type==='spp-delete'){
   const id=String(event.data.id||'');if(!/^[a-zA-Z0-9_-]+$/.test(id))return;
-  void (async()=>{const next=structuredClone(data);next.sppReports=(next.sppReports||[]).filter(r=>r.id!==id);await commit(next);message('SPP revízna správa bola odstránená.');})().catch(fail);return;
+  void (async()=>{const next=structuredClone(data);next.sppReports=(next.sppReports||[]).filter(r=>r.id!==id);await commit(next);reply({type:'spp-deleted',id});message('SPP revízna správa bola odstránená.');})().catch(sppFail);return;
  }
  if(event.data.type==='spp-import'){
-  void (async()=>{if(!Array.isArray(event.data.reports)||event.data.reports.length>500)throw Error('Neplatný alebo príliš veľký import SPP.');const next=structuredClone(data),map=new Map((next.sppReports||[]).map(r=>[r.id,r]));for(const input of event.data.reports){if(!input||typeof input!=='object')throw Error('Import SPP obsahuje neplatný záznam.');const id=String(input.id||crypto.randomUUID());map.set(id,{...input,id,customerId:next.customers.some(c=>c.id===input.customerId)?String(input.customerId):''});}next.sppReports=[...map.values()];await commit(validateData(next));message('Import SPP bol uložený.');})().catch(fail);return;
+  void (async()=>{if(!Array.isArray(event.data.reports)||event.data.reports.length>500)throw Error('Neplatný alebo príliš veľký import SPP.');const next=structuredClone(data),map=new Map((next.sppReports||[]).map(r=>[r.id,r]));for(const input of event.data.reports){if(!input||typeof input!=='object')throw Error('Import SPP obsahuje neplatný záznam.');const id=String(input.id||crypto.randomUUID());map.set(id,{...input,id,customerId:next.customers.some(c=>c.id===input.customerId)?String(input.customerId):''});}next.sppReports=[...map.values()];await commit(validateData(next));message('Import SPP bol uložený.');})().catch(sppFail);return;
  }
  if(event.data.type!=='spp-save')return;
  void (async()=>{
@@ -326,10 +334,11 @@ window.addEventListener('message',event=>{
    else{for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const){const value=String(customerInput[key]||'').trim();if(value)customer[key]=value;}customer.updatedAt=now;}
   }
   const old=(next.sppReports||[]).find(r=>r.id===raw.id),base=old||stamp();
+  if(old&&event.data.expectedUpdatedAt!==old.updatedAt)throw Error('Správa bola medzitým zmenená. Otvorte ju znova z databázy pred uložením.');
   const report:SppReport={...base,id:String(raw.id||base.id),createdAt:old?.createdAt||base.createdAt,updatedAt:now,reportNo:String(raw.reportNo||'').trim(),customerId,customerName,address:String(raw.address||customer?.address||''),inspectionDate:String(raw.inspectionDate||''),state:['draft','ready','issued'].includes(String(raw.state))?raw.state as SppReport['state']:'draft',payload:raw.payload};
   next.sppReports=old?(next.sppReports||[]).map(r=>r.id===old.id?report:r):[...(next.sppReports||[]),report];
-  await commit(validateData(next));message('SPP revízna správa bola uložená a zaradená do synchronizácie.');
- })().catch(fail);
+  await commit(validateData(next));reply({type:'spp-saved',id:report.id,customerId:report.customerId,reportNo:report.reportNo,updatedAt:report.updatedAt});message('SPP revízna správa bola uložená do databázy a zaradená do synchronizácie.');
+ })().catch(sppFail);
 });
 interface InstallEvent extends Event { prompt(): Promise<void> }
 let installPrompt: InstallEvent | undefined, waitingWorker: ServiceWorker | undefined;

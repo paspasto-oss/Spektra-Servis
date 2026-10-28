@@ -79,6 +79,6 @@ export function validateData(input: unknown): Data {
     if (tip.verification !== 'draft' && (!tip.verifiedAt || (tip.category === 'fault' && !tip.model.trim()))) return fail('overenie rady vyžaduje dátum a pri poruche model');
     if (tip.verification === 'manufacturer' && !tip.source) return fail('podklad výrobcu vyžaduje odkaz na zdroj');
   }
-  for(const report of data.sppReports||[]){if(!report.customerName.trim()||!report.reportNo.trim())return fail('SPP správa bez zákazníka alebo čísla');if(report.customerId&&!customers.has(report.customerId))return fail('SPP správa bez zákazníka');try{const parsed=JSON.parse(report.payload);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return fail('obsah správy SPP');}catch{return fail('obsah správy SPP');}}
+  for(const report of data.sppReports||[]){if((report.state!=='draft'&&!report.customerName.trim())||!report.reportNo.trim())return fail('SPP správa bez zákazníka alebo čísla');if(report.customerId&&!customers.has(report.customerId))return fail('SPP správa bez zákazníka');try{const parsed=JSON.parse(report.payload);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return fail('obsah správy SPP');}catch{return fail('obsah správy SPP');}}
   return data;
 }
