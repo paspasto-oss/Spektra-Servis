@@ -18,3 +18,21 @@ test('Calendar escapes customer names and shows proportional duration and editor
  const html=calendarPage(d,{date:'2026-10-19',month:'2026-10',calendarMode:'week'});
  assert.ok(html.includes('&lt;Pavol&gt;'));assert.ok(html.includes('height:72px'));assert.ok(html.includes('data-action="edit-job"'));assert.ok(html.includes('08:00–09:00'));
 });
+
+test('Calendar menu exposes day, week and month; day view renders only the selected date',()=>{
+ const d=emptyData(),state={date:'2026-10-29',month:'2026-10',calendarMode:'day'};
+ const html=calendarPage(d,state);
+ for(const mode of ['day','week','month'])assert.ok(html.includes('data-mode="'+mode+'"'));
+ assert.ok(html.includes('class="calendar-menu"'));assert.ok(html.includes('--calendar-days:1'));
+ assert.equal((html.match(/data-action="select-day"/g)||[]).length,1);
+ assert.ok(html.includes('data-date="2026-10-29"'));
+ assert.ok(!html.includes('data-date="2026-10-28"'));
+ assert.ok(html.includes('aria-pressed="true" class="active">Deň'));
+});
+test('Week and month calendar retain seven days and six month rows',()=>{
+ const d=emptyData(),state={date:'2026-10-29',month:'2026-10',calendarMode:'week'};
+ assert.equal((calendarPage(d,state).match(/data-action="select-day"/g)||[]).length,7);
+ const month=calendarPage(d,{...state,calendarMode:'month'});
+ assert.equal((month.match(/class="day /g)||[]).length,42);
+ assert.ok(!month.includes('class="time-calendar"'));
+});

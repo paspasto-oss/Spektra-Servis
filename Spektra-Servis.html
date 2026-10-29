@@ -69,6 +69,58 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 @media print{.spp-shell{height:auto;overflow:visible}}
 
 .customer-suggestions[hidden]{display:none}
+
+/* Calendar controls share one row; the clock column stays in the scrollport. */
+.calendar-toolbar{flex-wrap:nowrap;gap:6px;padding:8px 12px}
+.calendar-title{flex:1;min-width:0;font-size:17px;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.calendar-menu{position:relative;flex:none;z-index:20}
+.calendar-menu summary{width:44px;height:44px;display:grid;place-items:center;cursor:pointer;list-style:none;border-radius:9px}
+.calendar-menu summary::-webkit-details-marker{display:none}
+.calendar-menu summary:hover{background:#edf2f7}
+.calendar-menu summary:focus-visible{outline:3px solid #f68e98;outline-offset:-3px}
+.calendar-menu summary svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.calendar-menu-panel{position:absolute;top:calc(100% + 6px);left:0;width:min(280px,calc(100vw - 16px));padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #17324730;z-index:20}
+.calendar-menu-panel>strong{display:block;font-size:12px;color:var(--muted);padding:8px 10px}
+.calendar-menu-panel [role=group]{display:grid;gap:4px}
+.calendar-menu-panel [data-action=calendar-mode]{text-align:left;min-height:44px;border:0;border-radius:8px;padding:10px 12px;background:white;color:var(--ink)}
+.calendar-menu-panel [data-action=calendar-mode].active{background:#e8f0fe;color:#00539b;font-weight:700}
+.calendar-menu-panel>.btn{display:flex;width:100%;justify-content:flex-start;min-height:44px}
+.calendar-menu-panel hr{border:0;border-top:1px solid var(--line);margin:10px 0}
+.calendar-primary{overflow:visible}
+.time-head,.time-body{grid-template-columns:48px repeat(var(--calendar-days,7),minmax(0,1fr))}
+.time-head{z-index:8}
+.time-head>span{position:sticky;left:0;z-index:9;align-self:stretch;display:grid;place-items:center;background:#fff;border-right:1px solid #dadce0}
+.time-axis{position:sticky;left:0;z-index:6;border-right:1px solid #dadce0;box-shadow:2px 0 3px #17324708}
+.time-week.day-view{min-width:100%;width:100%}
+.calendar-add{background:var(--red);color:white}
+@media(max-width:760px){
+ .calendar-shell{height:calc(100vh - 88px - env(safe-area-inset-bottom));height:calc(100dvh - 88px - env(safe-area-inset-bottom));min-height:0;display:flex;flex-direction:column;overflow:hidden}
+ .calendar-shell>.topbar,.calendar-shell>.storage-banner,.calendar-shell>.app-footer{display:none}
+ .calendar-shell #main-content{display:flex;flex:1;flex-direction:column;min-height:0;padding:0;width:100%;max-width:none;margin:0}
+ .calendar-shell .page-heading,.calendar-shell .calendar-help{display:none}
+ .calendar-shell .calendar-layout{display:flex;flex:1;flex-direction:column;align-items:stretch;min-width:0;min-height:0;gap:0}
+ .calendar-shell .calendar-primary{display:flex;flex:1;flex-direction:column;width:100%;min-width:0;min-height:0;border:0;border-radius:0}
+ .calendar-shell .calendar-toolbar{height:54px;flex:none;padding:4px 6px;gap:2px;border-bottom:1px solid var(--line)}
+ .calendar-shell .calendar-toolbar>.btn{margin:0;padding:6px 8px;min-height:44px}
+ .calendar-shell .calendar-toolbar>.icon-btn{width:36px;min-width:36px;height:44px}
+ .calendar-shell .calendar-title{font-size:15px}
+ .calendar-shell .time-calendar{flex:1;width:100%;min-width:0;min-height:0;max-height:none;border-top:0}
+ .calendar-shell .time-week{min-width:742px}
+ .calendar-shell .time-week.day-view{min-width:100%}
+ .calendar-shell .time-head,.calendar-shell .time-body{grid-template-columns:42px repeat(var(--calendar-days,7),minmax(0,1fr))}
+ .calendar-shell .time-head button{padding:4px 2px;gap:1px}
+ .calendar-shell .time-head small{font-size:11px}
+ .calendar-shell .time-head b{font-size:19px;width:32px;height:32px}
+ .calendar-shell .time-head>span{font-size:10px}
+ .calendar-shell .time-axis span{font-size:10px;right:5px}
+ .calendar-shell .agenda,.calendar-shell .calendar-footer,.calendar-shell .time-legend{display:none}
+ .calendar-shell .calendar-grid{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;padding:0 6px 6px}
+ .calendar-shell .daynames{flex:none}
+ .calendar-shell .days{flex:1;grid-template-rows:repeat(6,minmax(44px,1fr))}
+ .calendar-shell .day{height:auto;min-height:44px;padding:6px 2px}
+}
+
+.time-axis{transform:translateZ(0)}.time-axis span{left:0;right:0;width:100%;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}.time-head>span{transform:translateZ(0)}
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -131,10 +183,19 @@ function render() {
         return;
     }
     sppDirty = false;
+    const previousCalendar = document.querySelector('.time-calendar');
+    const calendarPosition = previousCalendar ? { top: previousCalendar.scrollTop, left: previousCalendar.scrollLeft, mode: previousCalendar.dataset.mode } : null;
     const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), quotes: () => (0, apps_js_1.embeddedApp)('quotes'), rs2: () => (0, apps_js_1.embeddedApp)('rs2'), spp: () => (0, apps_js_1.sppRevisionPage)(), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), files: () => state.workspace === 'demo' ? '<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>' : (0, cloud_settings_js_1.filesPage)(data, fileQueue.filter(f => f.owner === (0, cloud_js_1.cloudUser)()), fileStatus), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
     const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${(0, ui_js_1.icon)(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
     root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${(0, ui_js_1.icon)('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${(0, ui_js_1.icon)('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${(0, ui_js_1.e)(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${(0, ui_js_1.e)(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell ${state.route === 'spp' ? 'spp-shell' : ''}"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+  <div class="main-shell ${state.route === 'spp' ? 'spp-shell' : state.route === 'calendar' ? 'calendar-shell' : ''}"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+    if (state.route === 'calendar' && calendarPosition) {
+        const grid = document.querySelector('.time-calendar');
+        if (grid) {
+            grid.scrollTop = calendarPosition.top;
+            grid.scrollLeft = grid.dataset.mode === calendarPosition.mode ? calendarPosition.left : 0;
+        }
+    }
 }
 (0, manuals_js_1.setManualRefresh)(() => { if (state.route === 'knowledge')
     render(); });
@@ -574,7 +635,7 @@ async function act(action, el) {
         render();
     }
     if (action === 'calendar-mode') {
-        state.calendarMode = el.dataset.mode || 'month';
+        state.calendarMode = ['day', 'week', 'month'].includes(el.dataset.mode || '') ? el.dataset.mode : 'week';
         state.month = state.date.slice(0, 7);
         render();
     }
@@ -585,7 +646,9 @@ async function act(action, el) {
     }
     if (action === 'calendar-prev' || action === 'calendar-next') {
         const step = action === 'calendar-next' ? 1 : -1;
-        if (state.calendarMode === 'week')
+        if (state.calendarMode === 'day')
+            state.date = (0, calendar_js_1.addDays)(state.date, step);
+        else if (state.calendarMode === 'week')
             state.date = (0, calendar_js_1.addDays)(state.date, step * 7);
         else {
             const d = new Date(state.month + '-01T12:00:00Z');
@@ -2377,16 +2440,21 @@ const domain_js_1 = require("../domain.js");
 const calendar_js_1 = require("../lib/calendar.js");
 const ui_js_1 = require("../ui.js");
 function calendarPage(data, state) {
-    const first = state.calendarMode === 'week' ? state.date : state.month + '-01';
+    const timed = state.calendarMode !== 'month';
+    const first = timed ? state.date : state.month + '-01';
     const weekday = (new Date(first + 'T12:00:00Z').getUTCDay() + 6) % 7;
-    const start = (0, calendar_js_1.addDays)(first, -weekday), days = Array.from({ length: state.calendarMode === 'week' ? 7 : 42 }, (_, i) => (0, calendar_js_1.addDays)(start, i));
+    const start = state.calendarMode === 'day' ? first : (0, calendar_js_1.addDays)(first, -weekday), days = Array.from({ length: state.calendarMode === 'day' ? 1 : timed ? 7 : 42 }, (_, i) => (0, calendar_js_1.addDays)(start, i));
     const scheduled = data.jobs.filter(j => j.start && j.status !== 'cancelled');
     const daily = scheduled.filter(j => (0, calendar_js_1.localDate)(j.start).startsWith(state.date)).sort((a, b) => a.start.localeCompare(b.start));
     return (0, ui_js_1.heading)('PLÁNOVANIE', 'Kalendár', 'Jeden technik. Prehľadné termíny. Časové pásmo Bratislava.', (0, ui_js_1.button)('Prepojenie Google', 'route-settings', 'calendar', 'btn secondary') + (0, ui_js_1.button)('Naplánovať výjazd', 'new-job-day', 'plus', 'btn primary')) +
-        `<div class="calendar-layout google-calendar"><section class="panel"><div class="calendar-toolbar"><div class="calendar-month">${(0, ui_js_1.button)('Predchádzajúci', 'calendar-prev', 'left', 'icon-btn')}<h2>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(state.calendarMode === 'week' ? state.date : state.month + '-01', { month: 'long', year: 'numeric' }))}</h2>${(0, ui_js_1.button)('Nasledujúci', 'calendar-next', 'right', 'icon-btn')}</div><div class="segmented"><button data-action="calendar-mode" data-mode="week" class="${state.calendarMode === 'week' ? 'active' : ''}">Týždeň</button><button data-action="calendar-mode" data-mode="month" class="${state.calendarMode === 'month' ? 'active' : ''}">Mesiac</button></div>${(0, ui_js_1.button)('Dnes', 'calendar-today', '', 'btn ghost')}</div>
-  ${state.calendarMode === 'week' ? weekGrid(data, days, state.date) : `<div class="calendar-grid"><div class="daynames">${['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'].map(d => `<span>${d}</span>`).join('')}</div><div class="days ${state.calendarMode === 'week' ? 'week' : ''}">${days.map(day => { const count = scheduled.filter(j => (0, calendar_js_1.localDate)(j.start).startsWith(day)).length; return `<button data-action="new-job-slot" data-date="${day}" data-time="09:00" aria-label="${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day))}, ${count} udalostí" aria-pressed="${day === state.date}" class="day ${day === state.date ? 'selected' : ''} ${day === (0, calendar_js_1.today)() ? 'today' : ''} ${day.slice(0, 7) !== state.month && state.calendarMode === 'month' ? 'other-month' : ''}"><span>${Number(day.slice(8))}</span>${count ? `<span class="day-dots" aria-hidden="true">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span><small>${count} ${count === 1 ? 'výjazd' : 'výjazdy'}</small>` : ''}</button>`; }).join('')}</div></div>`}<div class="calendar-footer"><span><i class="legend-dot"></i> Výjazd v aplikácii Spektra</span>${(0, ui_js_1.button)('Export kalendára .ics', 'export-calendar', 'download', 'btn ghost')}</div></section>
+        `<div class="calendar-layout google-calendar"><section class="panel calendar-primary"><div class="calendar-toolbar">
+    <details class="calendar-menu"><summary aria-label="Ponuka kalendára"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></summary><div class="calendar-menu-panel"><strong>Zobrazenie kalendára</strong><div role="group" aria-label="Zobrazenie kalendára">${[['day', 'Deň'], ['week', 'Týždeň'], ['month', 'Mesiac']].map(([mode, label]) => `<button type="button" data-action="calendar-mode" data-mode="${mode}" aria-pressed="${state.calendarMode === mode}" class="${state.calendarMode === mode ? 'active' : ''}">${label}</button>`).join('')}</div><hr>${(0, ui_js_1.button)('Prepojenie Google', 'route-settings', 'calendar', 'btn ghost')}${(0, ui_js_1.button)('Nastavenia a zálohy', 'route-settings', 'settings', 'btn ghost')}${(0, ui_js_1.button)('Export kalendára .ics', 'export-calendar', 'download', 'btn ghost')}</div></details>
+    <h2 class="calendar-title">${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(timed ? state.date : state.month + '-01', { month: 'long', year: 'numeric' }))}</h2>
+    ${(0, ui_js_1.button)('Predchádzajúci', 'calendar-prev', 'left', 'icon-btn')}${(0, ui_js_1.button)('Nasledujúci', 'calendar-next', 'right', 'icon-btn')}${(0, ui_js_1.button)('Dnes', 'calendar-today', '', 'btn ghost')}${(0, ui_js_1.button)('Naplánovať výjazd', 'new-job-day', 'plus', 'icon-btn calendar-add')}
+  </div>
+  ${timed ? weekGrid(data, days, state.date) : `<div class="calendar-grid"><div class="daynames">${['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'].map(d => `<span>${d}</span>`).join('')}</div><div class="days ${state.calendarMode === 'week' ? 'week' : ''}">${days.map(day => { const count = scheduled.filter(j => (0, calendar_js_1.localDate)(j.start).startsWith(day)).length; return `<button data-action="new-job-slot" data-date="${day}" data-time="09:00" aria-label="${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day))}, ${count} udalostí" aria-pressed="${day === state.date}" class="day ${day === state.date ? 'selected' : ''} ${day === (0, calendar_js_1.today)() ? 'today' : ''} ${day.slice(0, 7) !== state.month && state.calendarMode === 'month' ? 'other-month' : ''}"><span>${Number(day.slice(8))}</span>${count ? `<span class="day-dots" aria-hidden="true">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span><small>${count} ${count === 1 ? 'výjazd' : 'výjazdy'}</small>` : ''}</button>`; }).join('')}</div></div>`}<div class="calendar-footer"><span><i class="legend-dot"></i> Výjazd v aplikácii Spektra</span>${(0, ui_js_1.button)('Export kalendára .ics', 'export-calendar', 'download', 'btn ghost')}</div></section>
   <section class="panel agenda"><div class="panel-head"><div><span class="eyebrow">AGENDA DŇA</span><h2>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(state.date, { weekday: 'long', day: 'numeric', month: 'numeric' }))}</h2></div></div>${daily.length ? daily.map(j => (0, ui_js_1.jobCard)(j, data, true)).join('') : (0, ui_js_1.empty)('Žiadny výjazd', 'Vyberte deň alebo naplánujte novú zákazku.', (0, ui_js_1.button)('Pridať termín', 'new-job-day', 'plus'), 'calendar')}</section></div>
-  <div class="inline-note">Google Kalendár: termín otvoríte tlačidlom v detaile zákazky a uložíte ho ručne. Automatická synchronizácia ani odosielanie upozornení zatiaľ nie sú zapnuté. Import .ics nemusí v každom kalendári preniesť pripomienku; skontrolujte ju po importe.</div>`;
+  <div class="inline-note calendar-help">Google Kalendár: termín otvoríte tlačidlom v detaile zákazky a uložíte ho ručne. Automatická synchronizácia ani odosielanie upozornení zatiaľ nie sú zapnuté. Import .ics nemusí v každom kalendári preniesť pripomienku; skontrolujte ju po importe.</div>`;
 }
 const minute = (local) => Number(local.slice(11, 13)) * 60 + Number(local.slice(14, 16));
 function daySlots(jobs, day) {
@@ -2430,7 +2498,7 @@ function weekGrid(data, days, selected) {
     const to = Math.max(19 * 60, ...all.map(s => Math.ceil(s.end / 60) * 60));
     const height = (to - from) * 1.2;
     const hours = Array.from({ length: (to - from) / 60 }, (_, i) => from / 60 + i);
-    return `<div class="time-calendar" tabindex="0" aria-label="Týždenný kalendár, posúvaním zobrazíte ďalšie hodiny a dni"><div class="time-week">
+    return `<div class="time-calendar" tabindex="0" data-mode="${days.length === 1 ? 'day' : 'week'}" aria-label="${days.length === 1 ? 'Denný' : 'Týždenný'} kalendár, posúvaním zobrazíte ďalšie hodiny a dni"><div class="time-week ${days.length === 1 ? 'day-view' : ''}" style="--calendar-days:${days.length}">
     <div class="time-head"><span>Čas</span>${days.map(day => `<button type="button" data-action="select-day" data-date="${day}" aria-pressed="${day === selected}" class="${day === (0, calendar_js_1.today)() ? 'is-today' : ''} ${day === selected ? 'is-selected' : ''}"><small>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day, { weekday: 'short' }))}</small><b>${Number(day.slice(8))}</b></button>`).join('')}</div>
     <div class="time-body" style="height:${height}px"><div class="time-axis">${hours.map(h => `<span style="top:${(h * 60 - from) * 1.2}px">${String(h).padStart(2, '0')}:00</span>`).join('')}</div>
     ${days.map((day, i) => `<div class="time-day ${day === (0, calendar_js_1.today)() ? 'is-today' : ''}">${Array.from({ length: (to - from) / 30 }, (_, n) => { const m = from + n * 30, time = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); return `<button type="button" class="time-slot" data-action="new-job-slot" data-date="${day}" data-time="${time}" aria-label="Naplánovať výjazd ${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day))} o ${time}" title="Naplánovať výjazd o ${time}" style="top:${n * 36}px"></button>`; }).join('')}${slots[i].map(s => {

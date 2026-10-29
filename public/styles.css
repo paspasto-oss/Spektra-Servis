@@ -68,3 +68,55 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 @media print{.spp-shell{height:auto;overflow:visible}}
 
 .customer-suggestions[hidden]{display:none}
+
+/* Calendar controls share one row; the clock column stays in the scrollport. */
+.calendar-toolbar{flex-wrap:nowrap;gap:6px;padding:8px 12px}
+.calendar-title{flex:1;min-width:0;font-size:17px;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.calendar-menu{position:relative;flex:none;z-index:20}
+.calendar-menu summary{width:44px;height:44px;display:grid;place-items:center;cursor:pointer;list-style:none;border-radius:9px}
+.calendar-menu summary::-webkit-details-marker{display:none}
+.calendar-menu summary:hover{background:#edf2f7}
+.calendar-menu summary:focus-visible{outline:3px solid #f68e98;outline-offset:-3px}
+.calendar-menu summary svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.calendar-menu-panel{position:absolute;top:calc(100% + 6px);left:0;width:min(280px,calc(100vw - 16px));padding:12px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #17324730;z-index:20}
+.calendar-menu-panel>strong{display:block;font-size:12px;color:var(--muted);padding:8px 10px}
+.calendar-menu-panel [role=group]{display:grid;gap:4px}
+.calendar-menu-panel [data-action=calendar-mode]{text-align:left;min-height:44px;border:0;border-radius:8px;padding:10px 12px;background:white;color:var(--ink)}
+.calendar-menu-panel [data-action=calendar-mode].active{background:#e8f0fe;color:#00539b;font-weight:700}
+.calendar-menu-panel>.btn{display:flex;width:100%;justify-content:flex-start;min-height:44px}
+.calendar-menu-panel hr{border:0;border-top:1px solid var(--line);margin:10px 0}
+.calendar-primary{overflow:visible}
+.time-head,.time-body{grid-template-columns:48px repeat(var(--calendar-days,7),minmax(0,1fr))}
+.time-head{z-index:8}
+.time-head>span{position:sticky;left:0;z-index:9;align-self:stretch;display:grid;place-items:center;background:#fff;border-right:1px solid #dadce0}
+.time-axis{position:sticky;left:0;z-index:6;border-right:1px solid #dadce0;box-shadow:2px 0 3px #17324708}
+.time-week.day-view{min-width:100%;width:100%}
+.calendar-add{background:var(--red);color:white}
+@media(max-width:760px){
+ .calendar-shell{height:calc(100vh - 88px - env(safe-area-inset-bottom));height:calc(100dvh - 88px - env(safe-area-inset-bottom));min-height:0;display:flex;flex-direction:column;overflow:hidden}
+ .calendar-shell>.topbar,.calendar-shell>.storage-banner,.calendar-shell>.app-footer{display:none}
+ .calendar-shell #main-content{display:flex;flex:1;flex-direction:column;min-height:0;padding:0;width:100%;max-width:none;margin:0}
+ .calendar-shell .page-heading,.calendar-shell .calendar-help{display:none}
+ .calendar-shell .calendar-layout{display:flex;flex:1;flex-direction:column;align-items:stretch;min-width:0;min-height:0;gap:0}
+ .calendar-shell .calendar-primary{display:flex;flex:1;flex-direction:column;width:100%;min-width:0;min-height:0;border:0;border-radius:0}
+ .calendar-shell .calendar-toolbar{height:54px;flex:none;padding:4px 6px;gap:2px;border-bottom:1px solid var(--line)}
+ .calendar-shell .calendar-toolbar>.btn{margin:0;padding:6px 8px;min-height:44px}
+ .calendar-shell .calendar-toolbar>.icon-btn{width:36px;min-width:36px;height:44px}
+ .calendar-shell .calendar-title{font-size:15px}
+ .calendar-shell .time-calendar{flex:1;width:100%;min-width:0;min-height:0;max-height:none;border-top:0}
+ .calendar-shell .time-week{min-width:742px}
+ .calendar-shell .time-week.day-view{min-width:100%}
+ .calendar-shell .time-head,.calendar-shell .time-body{grid-template-columns:42px repeat(var(--calendar-days,7),minmax(0,1fr))}
+ .calendar-shell .time-head button{padding:4px 2px;gap:1px}
+ .calendar-shell .time-head small{font-size:11px}
+ .calendar-shell .time-head b{font-size:19px;width:32px;height:32px}
+ .calendar-shell .time-head>span{font-size:10px}
+ .calendar-shell .time-axis span{font-size:10px;right:5px}
+ .calendar-shell .agenda,.calendar-shell .calendar-footer,.calendar-shell .time-legend{display:none}
+ .calendar-shell .calendar-grid{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;padding:0 6px 6px}
+ .calendar-shell .daynames{flex:none}
+ .calendar-shell .days{flex:1;grid-template-rows:repeat(6,minmax(44px,1fr))}
+ .calendar-shell .day{height:auto;min-height:44px;padding:6px 2px}
+}
+
+.time-axis{transform:translateZ(0)}.time-axis span{left:0;right:0;width:100%;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}.time-head>span{transform:translateZ(0)}
