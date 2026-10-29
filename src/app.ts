@@ -88,6 +88,7 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
   if (editor.type === 'job') {
     const old = data.jobs.find(x => x.id === editor!.id), start = s('start') ? toUtc(s('start')) : '';
     let customerId = s('customerId');
+    if(!customerId)throw Error('Vyberte zákazníka zo zhôd pod poľom alebo vytvorte nový kontakt.');
     if (customerId === '__new__') {
       if (!s('newCustomerName')) throw new Error('Vyplňte meno nového zákazníka.');
       const customer: Customer = { ...stamp(), name: s('newCustomerName'), company: s('newCustomerCompany'), ico:'', dic:'', icDph:'', phone: s('newCustomerPhone'), email: s('newCustomerEmail'), address: s('newCustomerAddress'), notes: '', archived: false };
@@ -136,9 +137,19 @@ async function act(action: string, el: HTMLElement): Promise<void> {
     dialog.querySelector<HTMLInputElement>('[name=newCustomerName]')?.focus();
     return;
   }
+  if(action==='picker-edit-contact'){openEditor('customer',id);return;}
+  if(action==='picker-contact'){
+    const customer=data.customers.find(c=>c.id===id&&!c.archived);if(!customer)return;
+    const select=dialog.querySelector<HTMLSelectElement>('select[name=customerId]');if(select){select.value=customer.id;select.dispatchEvent(new Event('change',{bubbles:true}));}
+    const input=dialog.querySelector<HTMLInputElement>('#customer-picker');if(input){input.value=customer.name||customer.company;input.setCustomValidity('');input.setAttribute('aria-expanded','false');}
+    const host=dialog.querySelector<HTMLElement>('#customer-picker-results');if(host){host.hidden=true;host.replaceChildren();}
+    dirty=true;return;
+  }
   if(action==='job-pick-contact'){
     const customer=data.customers.find(c=>c.id===id);if(!customer)return;
     const select=dialog.querySelector<HTMLSelectElement>('#job-customer');if(select){select.value=customer.id;select.dispatchEvent(new Event('change',{bubbles:true}));}
+    const input=dialog.querySelector<HTMLInputElement>('#customer-picker');if(input){input.value=customer.name||customer.company;input.setCustomValidity('');input.setAttribute('aria-expanded','false');}
+    const host=dialog.querySelector<HTMLElement>('#customer-picker-results');if(host){host.hidden=true;host.replaceChildren();}
     dirty=true;return;
   }
   if(action==='job-files'){if(dirty)throw Error('Najskôr uložte zákazku.');if(!closeEditor())return;nav('files');const select=document.querySelector<HTMLSelectElement>('#attachment-form select');if(select)select.value=id;return;}
@@ -281,6 +292,22 @@ document.addEventListener('submit', event => { if ((event.target as HTMLElement)
 document.addEventListener('input', event => {
   const el = event.target as HTMLInputElement;
   if (el.id === 'page-search') { const pos = el.selectionStart; state.query = el.value; render(); const replacement = document.querySelector<HTMLInputElement>('#page-search'); replacement?.focus(); if (replacement && pos !== null) { try { replacement.setSelectionRange(pos, pos); } catch { /* input type support */ } } }
+  if(el.id==='contact-name-search'){
+    const host=dialog.querySelector<HTMLElement>('#contact-name-results');if(!host)return;const q=normalize(el.value).trim();
+    if(q.length<3){host.hidden=true;host.replaceChildren();el.setAttribute('aria-expanded','false');return;}
+    const tokens=q.split(/\s+/),rows=data.customers.filter(c=>!c.archived&&c.id!==editor?.id&&tokens.every(t=>normalize([c.name,c.company].join(' ')).includes(t))).slice(0,20);
+    host.innerHTML=rows.map(c=>button(c.name||c.company,'picker-edit-contact','','btn secondary',`data-id="${e(c.id)}"`)+'<small>'+e([c.phone,c.address].filter(Boolean).join(' • '))+'</small>').join('')||'<small>Žiadna zhoda v adresári. Môžete uložiť nový kontakt.</small>';host.hidden=false;el.setAttribute('aria-expanded','true');return;
+  }
+  if(el.id==='customer-picker'){
+    const host=dialog.querySelector<HTMLElement>('#customer-picker-results'),selected=dialog.querySelector<HTMLSelectElement>('select[name=customerId]');if(!host||!selected)return;
+    selected.value='';selected.dispatchEvent(new Event('change',{bubbles:true}));
+    el.required=true;el.setCustomValidity('Vyberte zákazníka zo zhôd pod poľom.');
+    const q=normalize(el.value).trim();
+    if(q.length<3){host.hidden=true;host.replaceChildren();el.setAttribute('aria-expanded','false');return;}
+    const tokens=q.split(/\s+/),rows=data.customers.filter(c=>!c.archived&&tokens.every(t=>normalize([c.name,c.company].join(' ')).includes(t))).slice(0,20);
+    host.innerHTML=rows.map(c=>button(c.name||c.company,'picker-contact','','btn secondary',`data-id="${e(c.id)}"`)+'<small>'+e([c.company,c.phone,c.address].filter(Boolean).join(' • '))+'</small>').join('')||'<small>Žiadna zhoda v adresári. Použite Nový kontakt alebo pridajte zákazníka v adresári.</small>';
+    host.hidden=false;el.setAttribute('aria-expanded','true');return;
+  }
   if(el.name==='newCustomerName'){
     const host=dialog.querySelector<HTMLElement>('#job-contact-suggestions'),q=normalize(el.value);if(!host)return;
     if(q.length<3){host.hidden=true;host.replaceChildren();return;}
@@ -298,9 +325,11 @@ document.addEventListener('change', event => {
     if (fields) { fields.hidden = el.value !== '__new__'; fields.disabled = fields.hidden; }
     dialog.querySelector('[data-action="job-new-contact"]')?.setAttribute('aria-expanded', String(el.value === '__new__'));
 
+    const search=dialog.querySelector<HTMLInputElement>('#customer-picker');if(search){search.required=el.value!=='__new__';search.setCustomValidity('');if(el.value==='__new__'){search.value='';search.setAttribute('aria-expanded','false');const host=dialog.querySelector<HTMLElement>('#customer-picker-results');if(host)host.hidden=true;}}
     const device = dialog.querySelector<HTMLSelectElement>('#job-device'); if (device) device.innerHTML = deviceOptions(data, el.value);
     const address = dialog.querySelector<HTMLInputElement>('[name=address]'); if (address) address.value = data.customers.find(c => c.id === el.value)?.address || '';
   }
+  if(el.id==='device-customer'){const location=dialog.querySelector<HTMLInputElement>('[name=location]');if(location)location.value=data.customers.find(c=>c.id===el.value)?.address||'';}
   if (el.id === 'job-device') { const address = dialog.querySelector<HTMLInputElement>('[name=address]'), device = data.devices.find(d => d.id === el.value); if (address && device?.location) address.value = device.location; }
 });
 window.addEventListener('hashchange', () => { const route = location.hash.slice(1); if (route && state.route !== route) { if(sppDirty&&!confirm('SPP správa obsahuje neuložené zmeny. Opustiť ju bez uloženia?')){history.replaceState(null,'','#'+state.route);return;} sppDirty=false; if (dialog.open && !closeEditor()) { history.replaceState(null, '', '#' + state.route); return; } state.route = routes.some(r => r[0] === route) || route === 'settings' ? route : 'home'; state.query = ''; state.filter = ''; state.selectedCustomer = ''; render(); } });

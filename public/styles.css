@@ -66,3 +66,5 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
  .spp-shell .save-state{font-size:8px;max-width:110px;line-height:1.2}
 }
 @media print{.spp-shell{height:auto;overflow:visible}}
+
+.customer-suggestions[hidden]{display:none}
