@@ -1,3 +1,4 @@
+import {installCalendarSwipe} from './lib/calendar-swipe.js';
 import {initCloud,loginCloud,logoutCloud,enableCloud,synchronize,cloudState,cloudUser} from './lib/cloud.js';
 import {cloudSettings,filesPage} from './modules/cloud-settings.js';
 import {queuedFiles,queueFile,fileType,type PendingFile} from './lib/file-queue.js';
@@ -475,3 +476,8 @@ document.addEventListener('submit',event=>{
 });
 window.addEventListener('online',()=>{void syncTick();void resumeOneDrive().then(()=>fileTick()).catch(()=>{});});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void syncTick();});
+
+installCalendarSwipe(document,direction=>{
+ const action=direction==='next'?'calendar-next':'calendar-prev',button=document.querySelector<HTMLElement>('[data-action="'+action+'"]');
+ if(state.route==='calendar'&&button&&!dialog.open)void act(action,button).catch(fail);
+});

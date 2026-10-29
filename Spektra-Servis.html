@@ -124,6 +124,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const calendar_swipe_js_1 = require("./lib/calendar-swipe.js");
 const cloud_js_1 = require("./lib/cloud.js");
 const cloud_settings_js_1 = require("./modules/cloud-settings.js");
 const file_queue_js_1 = require("./lib/file-queue.js");
@@ -1238,6 +1239,11 @@ document.addEventListener('submit', event => {
 window.addEventListener('online', () => { void syncTick(); void (0, onedrive_js_1.resumeOneDrive)().then(() => fileTick()).catch(() => { }); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden)
     void syncTick(); });
+(0, calendar_swipe_js_1.installCalendarSwipe)(document, direction => {
+    const action = direction === 'next' ? 'calendar-next' : 'calendar-prev', button = document.querySelector('[data-action="' + action + '"]');
+    if (state.route === 'calendar' && button && !dialog.open)
+        void act(action, button).catch(fail);
+});
 
 },
 "demo.js":function(require,module,exports){
@@ -1467,6 +1473,65 @@ function download(name, content, type = 'application/json') {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+},
+"lib/calendar-swipe.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.calendarSwipeDirection = calendarSwipeDirection;
+exports.installCalendarSwipe = installCalendarSwipe;
+function calendarSwipeDirection(start, x, y, at) {
+    const dx = x - start.x, dy = y - start.y;
+    if (at - start.at > 1200 || Math.abs(dx) < Math.min(90, Math.max(48, start.width * .16)) || Math.abs(dx) < Math.abs(dy) * 1.4)
+        return null;
+    if (start.mode === 'week' && ((dx < 0 && start.left < start.maxLeft - 2) || (dx > 0 && start.left > 2)))
+        return null;
+    return dx < 0 ? 'next' : 'prev';
+}
+function installCalendarSwipe(doc, navigate) {
+    let start = null, surface = null, suppressClickUntil = 0;
+    const edge = (g, dx) => g.mode !== 'week' || (dx < 0 ? g.left >= g.maxLeft - 2 : g.left <= 2);
+    doc.addEventListener('touchstart', event => {
+        start = null;
+        surface = null;
+        if (event.touches.length !== 1)
+            return;
+        const target = event.target instanceof Element ? event.target : null, grid = target?.closest('.time-calendar,.calendar-grid');
+        if (!grid || !target?.closest('.calendar-shell'))
+            return;
+        const touch = event.touches[0];
+        surface = grid;
+        start = { x: touch.clientX, y: touch.clientY, at: Date.now(), left: grid.scrollLeft, maxLeft: grid.scrollWidth - grid.clientWidth, width: grid.clientWidth, mode: grid.dataset.mode || 'month' };
+    }, { passive: true });
+    doc.addEventListener('touchmove', event => {
+        if (!start || event.touches.length !== 1) {
+            start = null;
+            return;
+        }
+        const t = event.touches[0], dx = t.clientX - start.x, dy = t.clientY - start.y;
+        if (Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) * 1.4 && edge(start, dx) && event.cancelable)
+            event.preventDefault();
+    }, { passive: false });
+    doc.addEventListener('touchend', event => {
+        const gesture = start, grid = surface;
+        start = null;
+        surface = null;
+        if (!gesture || !grid?.isConnected || event.touches.length || event.changedTouches.length !== 1)
+            return;
+        const touch = event.changedTouches[0], direction = calendarSwipeDirection(gesture, touch.clientX, touch.clientY, Date.now());
+        if (!direction)
+            return;
+        if (event.cancelable)
+            event.preventDefault();
+        suppressClickUntil = Date.now() + 500;
+        navigate(direction);
+    }, { passive: false });
+    doc.addEventListener('touchcancel', () => { start = null; surface = null; }, { passive: true });
+    doc.addEventListener('click', event => { if (Date.now() < suppressClickUntil && event.target?.closest('.time-calendar,.calendar-grid')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    } }, { capture: true });
 }
 
 },
