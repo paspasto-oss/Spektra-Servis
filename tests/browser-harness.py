@@ -71,7 +71,7 @@ with sync_playwright() as pw:
     page.locator('input[name="address"]').fill('Testovacia adresa, Rajec')
     page.locator('input[name="phone"]').fill('+421 900 000 000')
     page.locator('#entity-form button[type="submit"]').click()
-    page.wait_for_selector('#job-customer')
+    page.wait_for_selector('#customer-picker')
     assert page.locator('#job-customer').input_value()
     assert page.locator('input[name="address"]').input_value()=='Testovacia adresa, Rajec'
     page.locator('[data-action="close-editor"]').first.click()
@@ -81,7 +81,13 @@ with sync_playwright() as pw:
     assert page.locator('.customer-card img').count()==0
     page.locator('[data-action="customer-tab"][data-tab="devices"]').click()
     page.locator('[data-action="new-device"]').first.click()
-    page.locator('select[name="customerId"]').select_option(index=1)
+    page.locator('#customer-picker').fill('Te')
+    assert page.locator('#customer-picker-results').is_hidden()
+    page.locator('#customer-picker').fill('Tes')
+    assert page.locator('#customer-picker-results button').count()==1
+    assert page.locator('#customer-picker-results img').count()==0
+    page.locator('#customer-picker-results button').click()
+    assert page.locator('#customer-picker-results').is_hidden()
     page.locator('input[name="manufacturer"]').fill('Test výrobca')
     page.locator('input[name="model"]').fill('Test model')
     page.locator('input[name="serial"]').fill('TEST-001')
