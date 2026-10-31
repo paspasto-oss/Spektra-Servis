@@ -121,6 +121,18 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 }
 
 .time-axis{transform:translateZ(0)}.time-axis span{left:0;right:0;width:100%;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}.time-head>span{transform:translateZ(0)}
+
+/* The home screen puts the working week first. */
+.home-planner>.page-heading,.home-planner>.calendar-help{display:none}
+.home-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.home-shortcuts .btn{justify-content:center;min-width:0}
+.home-shell .app-footer{display:none}
+@media(max-width:760px){
+ .home-planner{display:flex;flex:1;flex-direction:column;min-height:0}
+ .home-shortcuts{flex:none;gap:6px;padding:8px;margin:0;border-bottom:1px solid var(--line);background:white}
+ .home-shortcuts .btn{padding:8px 4px;font-size:12px;min-height:44px;gap:5px}
+ .home-shortcuts .icon{width:17px;height:17px}
+}
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -186,11 +198,11 @@ function render() {
     sppDirty = false;
     const previousCalendar = document.querySelector('.time-calendar');
     const calendarPosition = previousCalendar ? { top: previousCalendar.scrollTop, left: previousCalendar.scrollLeft, mode: previousCalendar.dataset.mode } : null;
-    const pages = { home: () => (0, dashboard_js_1.dashboard)(data), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), quotes: () => (0, apps_js_1.embeddedApp)('quotes'), rs2: () => (0, apps_js_1.embeddedApp)('rs2'), spp: () => (0, apps_js_1.sppRevisionPage)(), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), files: () => state.workspace === 'demo' ? '<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>' : (0, cloud_settings_js_1.filesPage)(data, fileQueue.filter(f => f.owner === (0, cloud_js_1.cloudUser)()), fileStatus), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
+    const pages = { home: () => (0, dashboard_js_1.dashboard)(data, state), jobs: () => (0, jobs_js_1.jobsPage)(data, state), customers: () => (0, customers_js_1.customersPage)(data, state), calendar: () => (0, calendar_view_js_1.calendarPage)(data, state), quotes: () => (0, apps_js_1.embeddedApp)('quotes'), rs2: () => (0, apps_js_1.embeddedApp)('rs2'), spp: () => (0, apps_js_1.sppRevisionPage)(), knowledge: () => (0, knowledge_js_1.knowledgePage)(data, state), commerce: () => (0, commerce_js_2.commercePage)(data, state.query), files: () => state.workspace === 'demo' ? '<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>' : (0, cloud_settings_js_1.filesPage)(data, fileQueue.filter(f => f.owner === (0, cloud_js_1.cloudUser)()), fileStatus), settings: () => (0, settings_js_1.settingsPage)(data, state.workspace === 'demo') };
     const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${(0, ui_js_1.icon)(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
     root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${(0, ui_js_1.icon)('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${(0, ui_js_1.icon)('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${(0, ui_js_1.e)(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${(0, ui_js_1.e)(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
-  <div class="main-shell ${state.route === 'spp' ? 'spp-shell' : state.route === 'calendar' ? 'calendar-shell' : ''}"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
-    if (state.route === 'calendar' && calendarPosition) {
+  <div class="main-shell ${state.route === 'spp' ? 'spp-shell' : state.route === 'home' ? 'calendar-shell home-shell' : state.route === 'calendar' ? 'calendar-shell' : ''}"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${(0, ui_js_1.e)(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : (navigator.onLine ? 'Uložené v zariadení' : 'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${(0, ui_js_1.icon)('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${(0, ui_js_1.icon)('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${(0, ui_js_1.button)('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${(0, ui_js_1.icon)('lock')}<span>${(0, ui_js_1.e)(cloud_js_1.cloudState.enabled ? cloud_js_1.cloudState.status : "Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)()}</main><footer class="app-footer"><span>Spektra Servis <b>v${domain_js_1.APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
+    if ((state.route === 'calendar' || state.route === 'home') && calendarPosition) {
         const grid = document.querySelector('.time-calendar');
         if (grid) {
             grid.scrollTop = calendarPosition.top;
@@ -636,6 +648,10 @@ async function act(action, el) {
         render();
     }
     if (action === 'calendar-mode') {
+        if (state.route === 'home') {
+            state.route = 'calendar';
+            location.hash = 'calendar';
+        }
         state.calendarMode = ['day', 'week', 'month'].includes(el.dataset.mode || '') ? el.dataset.mode : 'week';
         state.month = state.date.slice(0, 7);
         render();
@@ -647,7 +663,9 @@ async function act(action, el) {
     }
     if (action === 'calendar-prev' || action === 'calendar-next') {
         const step = action === 'calendar-next' ? 1 : -1;
-        if (state.calendarMode === 'day')
+        if (state.route === 'home')
+            state.date = (0, calendar_js_1.addDays)(state.date, step * 7);
+        else if (state.calendarMode === 'day')
             state.date = (0, calendar_js_1.addDays)(state.date, step);
         else if (state.calendarMode === 'week')
             state.date = (0, calendar_js_1.addDays)(state.date, step * 7);
@@ -1241,7 +1259,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden)
     void syncTick(); });
 (0, calendar_swipe_js_1.installCalendarSwipe)(document, direction => {
     const action = direction === 'next' ? 'calendar-next' : 'calendar-prev', button = document.querySelector('[data-action="' + action + '"]');
-    if (state.route === 'calendar' && button && !dialog.open)
+    if ((state.route === 'calendar' || state.route === 'home') && button && !dialog.open)
         void act(action, button).catch(fail);
 });
 
@@ -2656,22 +2674,12 @@ function customersPage(data, state) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dashboard = dashboard;
-const domain_js_1 = require("../domain.js");
 const calendar_js_1 = require("../lib/calendar.js");
 const ui_js_1 = require("../ui.js");
-function dashboard(data) {
-    const day = (0, calendar_js_1.today)();
-    const todayJobs = data.jobs.filter(j => j.start && (0, calendar_js_1.localDate)(j.start).startsWith(day) && j.status !== 'cancelled').sort((a, b) => a.start.localeCompare(b.start));
-    const open = data.jobs.filter(domain_js_1.isOpen), waiting = open.filter(j => j.status === 'parts');
-    const due = data.devices.filter(d => !d.archived && d.nextService && d.nextService <= (0, calendar_js_1.addDays)(day, 30)).sort((a, b) => a.nextService.localeCompare(b.nextService));
-    const paid = data.jobs.filter(j => j.payment === 'paid' && j.amount !== null && j.updatedAt.slice(0, 7) === day.slice(0, 7));
-    const stat = (name, value, symbol, sub, cls = '') => `<div class="stat"><div class="stat-label">${(0, ui_js_1.e)(name)}${(0, ui_js_1.icon)(symbol, cls)}</div><strong>${(0, ui_js_1.e)(value)}</strong><span>${(0, ui_js_1.e)(sub)}</span></div>`;
-    return (0, ui_js_1.heading)('PRACOVNÝ PRIESTOR', 'Dobrý deň, ' + (data.settings.technician.split(' ')[0] || 'technik') + '.', 'Všetko pre dnešný servis na jednom mieste.', (0, ui_js_1.button)('Nová zákazka', 'new-job', 'plus', 'btn primary')) +
-        `<div class="stats">${stat('Dnešné výjazdy', todayJobs.length, 'calendar', (0, calendar_js_1.dateLabel)(day, { weekday: 'long', day: 'numeric', month: 'numeric' }))}${stat('Otvorené zákazky', open.length, 'jobs', 'Vrátane rozpracovaných')}${stat('Čaká na diel', waiting.length, 'tool', 'Naplánujte pokračovanie')}${stat('Blížiaci sa servis', due.length, 'bell', 'Do 30 dní vrátane omeškaných')}</div>
-  <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h2>Dnešný plán</h2><p>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day, { weekday: 'long', day: 'numeric', month: 'long' }))}</p></div>${(0, ui_js_1.button)('Kalendár', 'route-calendar', 'arrow', 'btn ghost')}</div><div class="job-list">${todayJobs.length ? todayJobs.map(j => (0, ui_js_1.jobCard)(j, data, true)).join('') : (0, ui_js_1.empty)('Dnes máte voľný kalendár', 'Pridajte prvú zákazku alebo naplánujte servis zákazníka.', (0, ui_js_1.button)('Naplánovať výjazd', 'new-job', 'plus'), 'calendar')}</div></section>
-  <aside class="stack"><section class="quick-card"><span class="eyebrow">RÝCHLY PRÍSTUP</span><h2>Od telefonátu<br>k hotovej zákazke.</h2><p>Zákazník, zariadenie, termín a vaše poznámky — prepojené.</p><div class="quick-actions">${(0, ui_js_1.button)('Pridať zákazníka', 'new-customer', 'customers', 'btn light')}${(0, ui_js_1.button)('Zapísať riešenie', 'new-tip', 'knowledge', 'btn dark-outline')}</div></section>
-  <section class="panel"><div class="panel-head"><h2>Najbližšie servisy</h2>${(0, ui_js_1.icon)('bell')}</div>${due.length ? due.slice(0, 4).map(d => `<button class="due-row" data-action="edit-device" data-id="${(0, ui_js_1.e)(d.id)}"><span class="due-icon">${(0, ui_js_1.icon)('device')}</span><span><strong>${(0, ui_js_1.e)((0, domain_js_1.deviceName)(d))}</strong><small>${(0, ui_js_1.e)(data.customers.find(c => c.id === d.customerId)?.name || '')}</small></span><span class="due-date ${d.nextService < day ? 'danger-text' : ''}">${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(d.nextService, { day: 'numeric', month: 'numeric' }))}</span></button>`).join('') : '<div class="panel-note">Pri zariadení nastavte dátum ďalšieho servisu. Zákonné lehoty sa automaticky neodhadujú.</div>'}</section></aside></div>
-  <div class="bottom-panels"><section class="panel info-panel">${(0, ui_js_1.icon)('shield')}<div><h3>Samostatná aplikácia, pôvodná RS2 je v bezpečí</h3><p>Táto verzia nečíta ani nemení ostré revízie. Zákazníkov zatiaľ evidujete osobitne.</p></div></section><section class="panel info-panel">${(0, ui_js_1.icon)('download')}<div><h3>Nezabudnite na zálohu</h3><p>${data.lastBackup ? 'Posledný export: ' + (0, ui_js_1.e)((0, calendar_js_1.dateLabel)(data.lastBackup)) : 'Údaje sú iba v tomto prehliadači. Exportujte ich pred zmenou zariadenia.'}</p></div>${(0, ui_js_1.button)('Záloha', 'route-settings', '', 'btn ghost')}</section></div>`;
+const calendar_view_js_1 = require("./calendar-view.js");
+function dashboard(data, state) {
+    const view = state || { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: (0, calendar_js_1.today)(), month: (0, calendar_js_1.today)().slice(0, 7), calendarMode: 'week', knowledgeTab: 'all', workspace: 'real' };
+    return `<div class="home-planner"><nav class="home-shortcuts" aria-label="Rýchly prístup">${(0, ui_js_1.button)('Servis', 'new-job', 'tool', 'btn primary')}${(0, ui_js_1.button)('Cenová ponuka', 'route-quotes', 'euro', 'btn secondary')}${(0, ui_js_1.button)('RS2', 'route-rs2', 'shield', 'btn secondary')}</nav>${(0, calendar_view_js_1.calendarPage)(data, { ...view, calendarMode: 'week' })}</div>`;
 }
 
 },

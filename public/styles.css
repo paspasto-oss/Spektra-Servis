@@ -120,3 +120,15 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 }
 
 .time-axis{transform:translateZ(0)}.time-axis span{left:0;right:0;width:100%;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}.time-head>span{transform:translateZ(0)}
+
+/* The home screen puts the working week first. */
+.home-planner>.page-heading,.home-planner>.calendar-help{display:none}
+.home-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.home-shortcuts .btn{justify-content:center;min-width:0}
+.home-shell .app-footer{display:none}
+@media(max-width:760px){
+ .home-planner{display:flex;flex:1;flex-direction:column;min-height:0}
+ .home-shortcuts{flex:none;gap:6px;padding:8px;margin:0;border-bottom:1px solid var(--line);background:white}
+ .home-shortcuts .btn{padding:8px 4px;font-size:12px;min-height:44px;gap:5px}
+ .home-shortcuts .icon{width:17px;height:17px}
+}
