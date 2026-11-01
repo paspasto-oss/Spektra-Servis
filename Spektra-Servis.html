@@ -3028,4 +3028,23 @@ exports.area = area;
 const select = (label, name, value, options, attrs = '') => `<label class="field"><span>${(0, exports.e)(label)}</span><select name="${(0, exports.e)(name)}" ${attrs}>${options.map(([v, label]) => `<option value="${(0, exports.e)(v)}" ${v === value ? 'selected' : ''}>${(0, exports.e)(label)}</option>`).join('')}</select></label>`;
 exports.select = select;
 
-}};const cache={};function load(id){if(cache[id])return cache[id].exports;if(!modules[id])throw new Error('Module '+id);const module={exports:{}};cache[id]=module;function require(request){const parts=id.split('/');parts.pop();for(const p of request.split('/')){if(p==='.'||p==='')continue;if(p==='..')parts.pop();else parts.push(p);}return load(parts.join('/'));}modules[id](require,module,module.exports);return module.exports;}load('app.js');})();</script></body></html>
+}};const cache={};function load(id){if(cache[id])return cache[id].exports;if(!modules[id])throw new Error('Module '+id);const module={exports:{}};cache[id]=module;function require(request){const parts=id.split('/');parts.pop();for(const p of request.split('/')){if(p==='.'||p==='')continue;if(p==='..')parts.pop();else parts.push(p);}return load(parts.join('/'));}modules[id](require,module,module.exports);return module.exports;}load('app.js');})();</script><script>
+/* Select the existing value once on entry; subsequent clicks can position the caret. */
+(() => {
+  const types = new Set(['text', 'number', 'email', 'tel', 'url', 'search']);
+  let entering = null;
+  const editable = el => el instanceof HTMLInputElement && types.has(el.type) && !el.disabled && !el.readOnly;
+  const select = el => { if (editable(el) && el.value) el.select(); };
+  document.addEventListener('pointerdown', event => {
+    entering = editable(event.target) && document.activeElement !== event.target ? event.target : null;
+  }, true);
+  document.addEventListener('focusin', event => { select(event.target); });
+  document.addEventListener('click', event => {
+    if (entering === event.target && document.activeElement === event.target) select(event.target);
+    entering = null;
+  });
+  document.addEventListener('pointercancel', () => { entering = null; }, true);
+})();
+</script>
+
+</body></html>

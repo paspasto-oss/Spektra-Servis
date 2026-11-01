@@ -118,4 +118,23 @@ window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==
  if(e.data.type==='spp-error'){saving=false;$('#save').disabled=false;alert(e.data.message);$('#save-status').textContent='Nepodarilo sa uložiť – skúste znova';}
 });parent.postMessage({type:'spp-ready'},location.origin);
 })();
-</script></body></html>
+
+/* Select the existing value once on entry; subsequent clicks can position the caret. */
+(() => {
+  const types = new Set(['text', 'number', 'email', 'tel', 'url', 'search']);
+  let entering = null;
+  const editable = el => el instanceof HTMLInputElement && types.has(el.type) && !el.disabled && !el.readOnly;
+  const select = el => { if (editable(el) && el.value) el.select(); };
+  document.addEventListener('pointerdown', event => {
+    entering = editable(event.target) && document.activeElement !== event.target ? event.target : null;
+  }, true);
+  document.addEventListener('focusin', event => { select(event.target); });
+  document.addEventListener('click', event => {
+    if (entering === event.target && document.activeElement === event.target) select(event.target);
+    entering = null;
+  });
+  document.addEventListener('pointercancel', () => { entering = null; }, true);
+})();
+</script>
+
+</body></html>

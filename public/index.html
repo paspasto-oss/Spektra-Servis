@@ -1,2 +1,21 @@
 <!doctype html>
-<html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#c20000"><meta name="description" content="Spektra Servis — zákazníci, zariadenia, zákazky a kalendár pre jedného technika."><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Spektra Servis"><title>Spektra Servis</title><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css"></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script type="module" src="./assets/app.js"></script></body></html>
+<html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#c20000"><meta name="description" content="Spektra Servis — zákazníci, zariadenia, zákazky a kalendár pre jedného technika."><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Spektra Servis"><title>Spektra Servis</title><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css"></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script type="module" src="./assets/app.js"></script><script>
+/* Select the existing value once on entry; subsequent clicks can position the caret. */
+(() => {
+  const types = new Set(['text', 'number', 'email', 'tel', 'url', 'search']);
+  let entering = null;
+  const editable = el => el instanceof HTMLInputElement && types.has(el.type) && !el.disabled && !el.readOnly;
+  const select = el => { if (editable(el) && el.value) el.select(); };
+  document.addEventListener('pointerdown', event => {
+    entering = editable(event.target) && document.activeElement !== event.target ? event.target : null;
+  }, true);
+  document.addEventListener('focusin', event => { select(event.target); });
+  document.addEventListener('click', event => {
+    if (entering === event.target && document.activeElement === event.target) select(event.target);
+    entering = null;
+  });
+  document.addEventListener('pointercancel', () => { entering = null; }, true);
+})();
+</script>
+
+</body></html>
