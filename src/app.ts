@@ -366,7 +366,7 @@ window.addEventListener('message',event=>{
   const customerName=String(raw.customerName||customerInput.name||customerInput.company||'').trim();
   if(event.data.saveCustomer&&customerName){
    if(!customer){const candidate:Customer={...stamp(),name:String(customerInput.name||customerName),company:String(customerInput.company||''),ico:String(customerInput.ico||''),dic:String(customerInput.dic||''),icDph:String(customerInput.icDph||''),phone:String(customerInput.phone||''),email:String(customerInput.email||''),address:String(customerInput.address||raw.address||''),notes:'Vytvorené z revíznej správy SPP',archived:false};customer=next.customers.find(c=>sameCustomer(c,candidate));if(!customer){customer=candidate;next.customers.push(customer);}customerId=customer.id;}
-   else{for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const){const value=String(customerInput[key]||'').trim();if(value)customer[key]=value;}customer.updatedAt=now;}
+   if(customer){for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const){const value=String(customerInput[key]||'').trim();if(value)customer[key]=value;}customer.updatedAt=now;}
   }
   const old=(next.sppReports||[]).find(r=>r.id===raw.id),base=old||stamp();
   if(old&&event.data.expectedUpdatedAt!==old.updatedAt)throw Error('Správa bola medzitým zmenená. Otvorte ju znova z databázy pred uložením.');

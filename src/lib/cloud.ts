@@ -42,7 +42,13 @@ async function reconcileSharedCustomers(input:Data):Promise<Data>{
    for(const report of next.sppReports||[])if(report.customerId===local.id)report.customerId=remote.id;
    local.id=remote.id;
   }
-  if(remote&&Date.parse(remote.updated_at||'')>Date.parse(local.updatedAt||''))Object.assign(local,{name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||local.createdAt,updatedAt:remote.updated_at||local.updatedAt});
+  if(remote){
+   // Modules may save only part of a contact. Keep details supplied by another module.
+   const shared={name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||''};
+   const remoteNewer=Date.parse(remote.updated_at||'')>Date.parse(local.updatedAt||'');
+   for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const)local[key]=remoteNewer?(shared[key]||local[key]||''):(local[key]||shared[key]||'');
+   if(remoteNewer)Object.assign(local,{notes:remote.notes||local.notes||'',archived:!!remote.archived,createdAt:remote.created_at||local.createdAt,updatedAt:remote.updated_at||local.updatedAt});
+  }
 
  }
  for(const remote of rows||[])if(!next.customers.some(x=>x.id===remote.id))next.customers.push({id:remote.id,name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||new Date().toISOString(),updatedAt:remote.updated_at||new Date().toISOString()});
