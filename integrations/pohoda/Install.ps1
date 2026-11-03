@@ -5,12 +5,13 @@ try {
     $dest = Join-Path $env:LOCALAPPDATA 'Spektra-PohodaSync'
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $acl = New-Object Security.AccessControl.DirectorySecurity
-    $acl.SetOwner($identity.User)
+    # Load and persist DACL only: do not request owner or SACL/audit privileges.
+    $directory = New-Object System.IO.DirectoryInfo($dest)
+    $acl = $directory.GetAccessControl([Security.AccessControl.AccessControlSections]::Access)
     $acl.SetAccessRuleProtection($true,$false)
     $rule = New-Object Security.AccessControl.FileSystemAccessRule($identity.User,'FullControl','ContainerInherit,ObjectInherit','None','Allow')
-    $acl.AddAccessRule($rule)
-    Set-Acl -LiteralPath $dest -AclObject $acl
+    $acl.SetAccessRule($rule)
+    $directory.SetAccessControl($acl)
     foreach ($file in @('Sync.ps1','StockParser.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $dest -Force }
     $name = Read-Host 'Prihlasovacie meno do POHODY'
     if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains(':')) { throw 'Neplatne meno POHODY.' }
