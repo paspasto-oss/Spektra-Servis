@@ -1,0 +1,34 @@
+SPEKTRA - SYNCHRONIZÁCIA ZÁSOB POHODA
+
+1. Rozbaľte celý ZIP na počítači SPEKTRA.
+2. Spustite POHODA mServer „Spektra“ (port 8080, firma 53690036_2026.mdb).
+3. Dvojklik na Spustit-instalaciu.cmd. Zadajte meno a heslo do POHODY,
+   potom email a heslo aktívneho administrátora Spektry / Cenových ponúk.
+4. Počkajte na HOTOVO. Otvorte Spektra Servis → Zásoby → Obnoviť.
+
+Inštalátor najprv vykoná skutočný prenos; až po úspechu nastaví úlohu
+každých 15 minút. Používateľ musí byť prihlásený vo Windows, počítač
+zapnutý a mServer spustený. Po reštarte znova spustite mServer.
+Program mServer nespúšťa, nezastavuje a neotvára port do internetu.
+Pri vypnutom PC/mServeri zostáva v Spektre posledný úspešný stav a jeho dátum.
+
+Množstvo „Na sklade“ = POHODA count, „Na výdaj“ = countIssue.
+Chýbajúce množstvo zostáva neznáme, nie nula. Rovnaké kódy sa nezlučujú:
+každá karta sa identifikuje interným ID POHODY. Do POHODY sa nezapisuje.
+Katalóg Cenových ponúk sa nemení. Prenášajú sa iba identifikácia karty,
+názov, jednotka, sklad, množstvá a čas exportu; ceny a kontakty sa neposielajú.
+
+Heslá sú uložené šifrovane systémom Windows pre aktuálneho používateľa
+na tomto počítači v %LOCALAPPDATA%\Spektra-PohodaSync.
+Pri zmene hesla spustite inštalátor znova. Heslá nikomu neposielajte.
+
+Synchronizovat-teraz.cmd spustí okamžitý prenos a ukáže výsledok.
+Zastavit-synchronizaciu.cmd odstráni iba naplánovanú úlohu.
+Po zastavení môžete odstrániť priečinok %LOCALAPPDATA%\Spektra-PohodaSync
+vrátane uložených prihlasovacích údajov. Údaje v Spektre zostanú.
+
+Chyby: Synchronizacia.log v uvedenom priečinku. HTTP 400 pri publikovaní
+môže znamenať neúplný export (pokles kariet o viac než 10 %), nesprávny
+čas PC alebo zamietnuté oprávnenie. Starý úspešný stav sa neprepíše.
+Nastavenie je určené pre účtovný rok 2026; pred prechodom na nový rok
+sa musí aktualizovať kontrola databázy a cloudového prijímača.
