@@ -1,4 +1,4 @@
-import {queryPohodaStocks,type StockPage} from './pohoda-stock.js';
+import {queryPohodaStocks,queryStockCategories,type StockCategory,type StockPage} from './pohoda-stock.js';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { validateData, normalize, customerPhoneKey, type Data } from '../domain.js';
 import { equal, mergeData, syncPayload, initialBase, type ConflictChoice } from './sync-merge.js';
@@ -105,9 +105,14 @@ export async function synchronize(choice?:ConflictChoice):Promise<Data|undefined
  cloudState.conflicts=[];cloudState.status='Synchronizované · '+new Date().toLocaleTimeString('sk-SK');return saved;
 }
 
-export async function readPohodaStocks(query:string,page:number):Promise<StockPage>{
+export async function readPohodaStocks(query:string,page:number,category=''):Promise<StockPage>{
  const c=await sdk();if(!user)throw Error('Prihláste sa účtom Cenových ponúk.');
  const {data:profile,error}=await c.from('app_users').select('active').eq('user_id',user.id).single();
  if(error||!profile?.active)throw Error('Účet nemá aktívny prístup k zásobám.');
- return queryPohodaStocks(c,query,page);
+ return queryPohodaStocks(c,query,page,category);
+}
+
+export async function readPohodaCategories():Promise<StockCategory[]>{
+ const c=await sdk();if(!user)throw Error('Prihláste sa účtom Cenových ponúk.');
+ return queryStockCategories(c);
 }

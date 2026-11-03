@@ -478,6 +478,13 @@ async function act(action, el) {
         window.open(commerce_js_1.APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer');
         return;
     }
+    if (action === 'stock-category-clear') {
+        stockView.category = '';
+        stockView.page = 0;
+        stockView.result = null;
+        render();
+        return;
+    }
     if (['stock-refresh', 'stock-prev', 'stock-next'].includes(action)) {
         if (action === 'stock-prev')
             stockView.page = Math.max(0, stockView.page - 1);
@@ -841,6 +848,13 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
     const el = event.target;
+    if (el.matches('[data-stock-category]')) {
+        stockView.category = el.value;
+        stockView.page = 0;
+        stockView.result = null;
+        render();
+        return;
+    }
     if (el.id === 'google-calendar-select') {
         try {
             (0, google_calendar_js_1.selectGoogleCalendar)(el.value);
@@ -1277,7 +1291,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden)
 const stockView = { result: null, loading: false, error: '', page: 0 };
 let stockKey = '', stockRequest = 0, stockTimer;
 function scheduleStocks() {
-    const key = state.route === 'commerce' && state.workspace === 'real' ? (0, cloud_js_1.cloudUser)() + '|' + state.query : '';
+    const key = state.route === 'commerce' && state.workspace === 'real' ? (0, cloud_js_1.cloudUser)() + '|' + state.query + '|' + (stockView.category || '') : '';
     if (key === stockKey)
         return;
     const previousUser = stockKey.split('|')[0];
@@ -1288,6 +1302,11 @@ function scheduleStocks() {
     stockView.page = 0;
     stockView.result = null;
     stockView.error = '';
+    if (!key || previousUser !== (0, cloud_js_1.cloudUser)()) {
+        stockView.categories = [];
+        stockView.category = '';
+        stockView.categoryError = '';
+    }
     if (key && (0, cloud_js_1.cloudUser)())
         stockTimer = setTimeout(() => void refreshStocks(), previousUser === (0, cloud_js_1.cloudUser)() ? 250 : 0);
 }
@@ -1295,15 +1314,23 @@ async function refreshStocks() {
     if (state.route !== 'commerce' || state.workspace !== 'real' || !(0, cloud_js_1.cloudUser)())
         return;
     clearTimeout(stockTimer);
-    const request = ++stockRequest, owner = (0, cloud_js_1.cloudUser)(), query = state.query, page = stockView.page;
+    const request = ++stockRequest, owner = (0, cloud_js_1.cloudUser)(), query = state.query, page = stockView.page, category = stockView.category || '';
     stockView.loading = true;
     stockView.error = '';
     renderStockContent();
     try {
-        const result = await (0, cloud_js_1.readPohodaStocks)(query, page);
+        const [stocks, categories] = await Promise.allSettled([(0, cloud_js_1.readPohodaStocks)(query, page, category), (0, cloud_js_1.readPohodaCategories)()]);
         if (request !== stockRequest || owner !== (0, cloud_js_1.cloudUser)() || state.route !== 'commerce')
             return;
-        stockView.result = result;
+        if (categories.status === 'fulfilled') {
+            stockView.categories = categories.value;
+            stockView.categoryError = '';
+        }
+        else
+            stockView.categoryError = 'Členenie sa nepodarilo načítať. Skúste Obnoviť.';
+        if (stocks.status === 'rejected')
+            throw stocks.reason;
+        stockView.result = stocks.value;
     }
     catch (err) {
         if (request === stockRequest)
@@ -1332,7 +1359,7 @@ function renderStockContent() {
             catch { }
     }
 }
-setInterval(() => { if (document.visibilityState === 'visible' && !stockView.loading && !document.querySelector('#page-search:focus'))
+setInterval(() => { if (document.visibilityState === 'visible' && !stockView.loading && !document.querySelector('#page-search:focus, [data-stock-category]:focus'))
     void refreshStocks(); }, 60000);
 window.addEventListener('online', () => void refreshStocks());
 
@@ -1711,6 +1738,7 @@ exports.logoutCloud = logoutCloud;
 exports.enableCloud = enableCloud;
 exports.synchronize = synchronize;
 exports.readPohodaStocks = readPohodaStocks;
+exports.readPohodaCategories = readPohodaCategories;
 const pohoda_stock_js_1 = require("./pohoda-stock.js");
 const domain_js_1 = require("../domain.js");
 const sync_merge_js_1 = require("./sync-merge.js");
@@ -1888,14 +1916,20 @@ async function synchronize(choice) {
     exports.cloudState.status = 'Synchronizované · ' + new Date().toLocaleTimeString('sk-SK');
     return saved;
 }
-async function readPohodaStocks(query, page) {
+async function readPohodaStocks(query, page, category = '') {
     const c = await sdk();
     if (!user)
         throw Error('Prihláste sa účtom Cenových ponúk.');
     const { data: profile, error } = await c.from('app_users').select('active').eq('user_id', user.id).single();
     if (error || !profile?.active)
         throw Error('Účet nemá aktívny prístup k zásobám.');
-    return (0, pohoda_stock_js_1.queryPohodaStocks)(c, query, page);
+    return (0, pohoda_stock_js_1.queryPohodaStocks)(c, query, page, category);
+}
+async function readPohodaCategories() {
+    const c = await sdk();
+    if (!user)
+        throw Error('Prihláste sa účtom Cenových ponúk.');
+    return (0, pohoda_stock_js_1.queryStockCategories)(c);
 }
 
 },
@@ -2497,21 +2531,67 @@ async function attachmentBlob(itemId, expectedAccount) {
 "lib/pohoda-stock.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.STOCK_PAGE_SIZE = void 0;
+exports.UNASSIGNED_CATEGORY = exports.STOCK_PAGE_SIZE = void 0;
 exports.stockSearchTerms = stockSearchTerms;
 exports.queryPohodaStocks = queryPohodaStocks;
+exports.stockCategoryTree = stockCategoryTree;
+exports.queryStockCategories = queryStockCategories;
+exports.stockCategoryFilter = stockCategoryFilter;
 exports.STOCK_PAGE_SIZE = 50;
 function stockSearchTerms(query) { return query.slice(0, 160).replace(/[^\p{L}\p{N}\s.\-\/]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 10); }
-async function queryPohodaStocks(client, search, page) {
+async function queryPohodaStocks(client, search, page, category = '') {
     if (!Number.isInteger(page) || page < 0)
         throw Error('Neplatná strana.');
-    let q = client.from('spektra_live_stocks').select('id,code,plu,name,unit,storage_name,quantity_available,quantity_issuable,synced_at', { count: 'exact' }).eq('active', true);
+    let q = client.from('spektra_stock_browser').select('id,code,plu,name,unit,storage_name,quantity_available,quantity_issuable,synced_at', { count: 'exact' }).eq('active', true);
+    if (category === exports.UNASSIGNED_CATEGORY)
+        q = q.is('category_path', null);
+    else if (category)
+        q = q.or(stockCategoryFilter(category));
     for (const word of stockSearchTerms(search))
         q = q.or(`code.ilike.%${word}%,plu.ilike.%${word}%,name.ilike.%${word}%`);
     const { data, error, count } = await q.order('name').order('id').range(page * exports.STOCK_PAGE_SIZE, (page + 1) * exports.STOCK_PAGE_SIZE - 1);
     if (error)
         throw Error('Zásoby sa nepodarilo načítať z API. Skontrolujte pripojenie a prihlásenie.');
     return { rows: (data || []), count: count || 0, loadedAt: new Date().toISOString() };
+}
+exports.UNASSIGNED_CATEGORY = '__unassigned__';
+function stockCategoryTree(categories) {
+    const nodes = new Map();
+    for (const c of categories) {
+        if (!c.category_path) {
+            const n = nodes.get(exports.UNASSIGNED_CATEGORY) || { path: exports.UNASSIGNED_CATEGORY, parent: '', label: 'Bez členenia', count: 0 };
+            n.count += c.card_count;
+            nodes.set(n.path, n);
+            continue;
+        }
+        const parts = c.category_path.split('/');
+        let parent = '';
+        for (const label of parts) {
+            const path = parent ? parent + '/' + label : label;
+            const n = nodes.get(path) || { path, parent, label, count: 0 };
+            n.count += c.card_count;
+            nodes.set(path, n);
+            parent = path;
+        }
+    }
+    return [...nodes.values()].sort((a, b) => a.path.localeCompare(b.path, 'sk'));
+}
+async function queryStockCategories(client) {
+    // Page through groups too: category count is not limited by the API's default row cap.
+    const rows = [];
+    for (let start = 0;; start += 500) {
+        const { data, error } = await client.from('spektra_stock_categories').select('category_path,card_count').order('category_path', { nullsFirst: true }).range(start, start + 499);
+        if (error)
+            throw Error('Členenie sa nepodarilo načítať. Skúste Obnoviť.');
+        rows.push(...(data || []));
+        if (!data || data.length < 500)
+            return rows;
+    }
+}
+function stockCategoryFilter(category) {
+    // Quote PostgREST values; escape LIKE metacharacters so category names stay literal.
+    const prefix = category.replace(/[\\%_*]/g, c => '\\' + c);
+    return `category_path.eq.${JSON.stringify(category)},category_path.like.${JSON.stringify(prefix + '/%')}`;
 }
 
 },
@@ -3100,11 +3180,28 @@ function settingsPage(data, isDemo) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stocksPage = stocksPage;
+exports.stockCategoryControls = stockCategoryControls;
 const ui_js_1 = require("../ui.js");
 const pohoda_stock_js_1 = require("../lib/pohoda-stock.js");
 function stocksPage(view, query, signedIn, demo) {
     const date = (v) => v && Number.isFinite(Date.parse(v)) ? new Date(v).toLocaleString('sk-SK', { timeZone: 'Europe/Bratislava' }) : 'Neuvedený';
-    return (0, ui_js_1.heading)('POHODA', 'Zásoby', 'Skladové množstvá z centrálnej databázy POHODA.', (0, ui_js_1.button)('Obnoviť', 'stock-refresh', 'cloud')) + `<section class="panel commerce-panel"><p>Prenos z POHODY zabezpečuje počítač SPEKTRA každých 15 minút, keď je zapnutý, prihlásený a má spustený mServer. Tento prehľad sa obnovuje každú minútu. Pri vypnutom počítači zostáva posledný úspešný stav.</p>${demo ? '<p>V ukážkovom priestore sa skutočné zásoby nenačítavajú.</p>' : !signedIn ? `<p>Na zobrazenie zásob sa prihláste účtom Cenových ponúk.</p>${(0, ui_js_1.button)('Prihlásiť sa', 'route-settings')}` : `${(0, ui_js_1.searchBox)(query, 'Kód, PLU alebo názov materiálu…')}<div role="status" aria-live="polite">${view.loading ? '<p>Načítavam zásoby…</p>' : ''}${view.error ? `<p class="danger-text">${(0, ui_js_1.e)(view.error)} Zobrazené staršie výsledky nie sú aktuálne overené.</p>` : ''}</div>${view.result ? `<p>${view.result.count} výsledkov · Načítané z API: ${(0, ui_js_1.e)(date(view.result.loadedAt))}</p>${view.result.rows.map(s => `<div class="stock-row"><div><strong>${(0, ui_js_1.e)(s.code || s.plu || 'Bez kódu')} · ${(0, ui_js_1.e)(s.name)}</strong><small>ID POHODA: ${(0, ui_js_1.e)(s.id)}</small><small>Sklad: ${(0, ui_js_1.e)(s.storage_name || 'Neuvedený')}</small><small>Synchronizácia POHODA: ${(0, ui_js_1.e)(date(s.synced_at))}${!s.synced_at || Date.now() - Date.parse(s.synced_at) > 86400000 ? ' · Starší alebo neznámy stav' : ''}</small></div><div><small>Na sklade</small><strong>${s.quantity_available === null ? 'Neznáme množstvo' : (0, ui_js_1.e)(s.quantity_available) + ' ' + (0, ui_js_1.e)(s.unit || '')}</strong>${s.quantity_issuable !== undefined && s.quantity_issuable !== null ? `<small>Na výdaj: ${(0, ui_js_1.e)(s.quantity_issuable)} ${(0, ui_js_1.e)(s.unit || '')}</small>` : ''}</div></div>`).join('') || '<p>Nenašli sa žiadne zásoby. Ak ešte neprebehol prvý prenos, spustite synchronizáciu na počítači SPEKTRA.</p>'}<div class="toolbar">${view.page > 0 ? (0, ui_js_1.button)('Predchádzajúce', 'stock-prev', 'left') : ''}<span>Strana ${view.page + 1}</span>${(view.page + 1) * pohoda_stock_js_1.STOCK_PAGE_SIZE < view.result.count ? (0, ui_js_1.button)('Ďalšie', 'stock-next', 'right') : ''}</div>` : ''}`}</section>`;
+    return (0, ui_js_1.heading)('POHODA', 'Zásoby', 'Skladové množstvá z centrálnej databázy POHODA.', (0, ui_js_1.button)('Obnoviť', 'stock-refresh', 'cloud')) + `<section class="panel commerce-panel"><p>Prenos z POHODY zabezpečuje počítač SPEKTRA každých 15 minút, keď je zapnutý, prihlásený a má spustený mServer. Tento prehľad sa obnovuje každú minútu. Pri vypnutom počítači zostáva posledný úspešný stav.</p>${demo ? '<p>V ukážkovom priestore sa skutočné zásoby nenačítavajú.</p>' : !signedIn ? `<p>Na zobrazenie zásob sa prihláste účtom Cenových ponúk.</p>${(0, ui_js_1.button)('Prihlásiť sa', 'route-settings')}` : `${stockCategoryControls(view)}${(0, ui_js_1.searchBox)(query, 'Kód, PLU alebo názov materiálu…')}<div role="status" aria-live="polite">${view.loading ? '<p>Načítavam zásoby…</p>' : ''}${view.error ? `<p class="danger-text">${(0, ui_js_1.e)(view.error)} Zobrazené staršie výsledky nie sú aktuálne overené.</p>` : ''}</div>${view.result ? `<p>${view.result.count} výsledkov · Načítané z API: ${(0, ui_js_1.e)(date(view.result.loadedAt))}</p>${view.result.rows.map(s => `<div class="stock-row"><div><strong>${(0, ui_js_1.e)(s.code || s.plu || 'Bez kódu')} · ${(0, ui_js_1.e)(s.name)}</strong><small>ID POHODA: ${(0, ui_js_1.e)(s.id)}</small><small>Členenie POHODA: ${(0, ui_js_1.e)(s.storage_name || 'Neuvedený')}</small><small>Synchronizácia POHODA: ${(0, ui_js_1.e)(date(s.synced_at))}${!s.synced_at || Date.now() - Date.parse(s.synced_at) > 86400000 ? ' · Starší alebo neznámy stav' : ''}</small></div><div><small>Na sklade</small><strong>${s.quantity_available === null ? 'Neznáme množstvo' : (0, ui_js_1.e)(s.quantity_available) + ' ' + (0, ui_js_1.e)(s.unit || '')}</strong>${s.quantity_issuable !== undefined && s.quantity_issuable !== null ? `<small>Na výdaj: ${(0, ui_js_1.e)(s.quantity_issuable)} ${(0, ui_js_1.e)(s.unit || '')}</small>` : ''}</div></div>`).join('') || '<p>Nenašli sa žiadne zásoby. Ak ešte neprebehol prvý prenos, spustite synchronizáciu na počítači SPEKTRA.</p>'}<div class="toolbar">${view.page > 0 ? (0, ui_js_1.button)('Predchádzajúce', 'stock-prev', 'left') : ''}<span>Strana ${view.page + 1}</span>${(view.page + 1) * pohoda_stock_js_1.STOCK_PAGE_SIZE < view.result.count ? (0, ui_js_1.button)('Ďalšie', 'stock-next', 'right') : ''}</div>` : ''}`}</section>`;
+}
+function stockCategoryControls(view) {
+    const selected = view.category || '', nodes = (0, pohoda_stock_js_1.stockCategoryTree)(view.categories || []);
+    let parent = '', html = '', depth = 0;
+    while (depth < 20) {
+        const children = nodes.filter(n => n.parent === parent);
+        if (!children.length)
+            break;
+        const current = children.find(n => selected === n.path || selected.startsWith(n.path + '/'));
+        html += `<label class="field" style="flex:1 1 200px;min-width:0"><span>${depth ? 'Podkategória' : 'Členenie POHODA'}</span><select data-stock-category aria-label="${depth ? 'Podkategória ' + depth : 'Členenie POHODA'}"><option value="${(0, ui_js_1.e)(parent)}" ${!current ? 'selected' : ''}>${depth ? 'Všetky podkategórie' : 'Všetky členenia'}</option>${children.map(n => `<option value="${(0, ui_js_1.e)(n.path)}" ${current === n ? 'selected' : ''}>${(0, ui_js_1.e)(n.label)} (${n.count})</option>`).join('')}</select></label>`;
+        if (!current || current.path === pohoda_stock_js_1.UNASSIGNED_CATEGORY)
+            break;
+        parent = current.path;
+        depth++;
+    }
+    return `<div class="toolbar" style="align-items:flex-end;flex-wrap:wrap">${html}${selected ? (0, ui_js_1.button)('Zrušiť členenie', 'stock-category-clear') : ''}</div>${selected ? `<p><strong>Vybrané členenie:</strong> ${selected === pohoda_stock_js_1.UNASSIGNED_CATEGORY ? 'Bez členenia' : (0, ui_js_1.e)(selected.split('/').join(' → '))}</p>` : ''}${view.categoryError ? `<p class="danger-text">${(0, ui_js_1.e)(view.categoryError)}</p>` : ''}`;
 }
 
 },

@@ -1,6 +1,6 @@
 import {stocksPage,type StockView} from './modules/stocks.js';
 import {installCalendarSwipe} from './lib/calendar-swipe.js';
-import {readPohodaStocks,initCloud,loginCloud,logoutCloud,enableCloud,synchronize,cloudState,cloudUser} from './lib/cloud.js';
+import {readPohodaCategories,readPohodaStocks,initCloud,loginCloud,logoutCloud,enableCloud,synchronize,cloudState,cloudUser} from './lib/cloud.js';
 import {cloudSettings,filesPage} from './modules/cloud-settings.js';
 import {queuedFiles,queueFile,fileType,type PendingFile} from './lib/file-queue.js';
 import {listManuals} from './lib/manual-store.js';
@@ -180,6 +180,7 @@ async function act(action: string, el: HTMLElement): Promise<void> {
     }finally{oneDriveBusy=false;buttons.forEach(b=>b.disabled=false);}return;
   }
   if (action === 'open-quotes' || action === 'open-rs2') { window.open(APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer'); return; }
+  if(action==='stock-category-clear'){stockView.category='';stockView.page=0;stockView.result=null;render();return;}
   if(['stock-refresh','stock-prev','stock-next'].includes(action)){if(action==='stock-prev')stockView.page=Math.max(0,stockView.page-1);if(action==='stock-next')stockView.page++;if(action!=='stock-refresh')stockView.result=null;void refreshStocks();return;}
   if (action === 'import-commerce') {
     if (state.workspace !== 'real') throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
@@ -326,6 +327,7 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   const el = event.target as HTMLSelectElement;
+  if(el.matches('[data-stock-category]')){stockView.category=el.value;stockView.page=0;stockView.result=null;render();return;}
   if (el.id === 'google-calendar-select') { try { selectGoogleCalendar(el.value); message('Cieľový kalendár vybraný.'); } catch (error) { fail(error); } }
   if (el.id === 'manual-filter') manualFilter(el.value);
   if (el.id === 'job-filter' || el.id === 'customer-filter') { state.filter = el.value; render(); }
@@ -489,16 +491,19 @@ installCalendarSwipe(document,direction=>{
 const stockView:StockView={result:null,loading:false,error:'',page:0};
 let stockKey='',stockRequest=0,stockTimer:ReturnType<typeof setTimeout>|undefined;
 function scheduleStocks():void{
- const key=state.route==='commerce'&&state.workspace==='real'?cloudUser()+'|'+state.query:'';
+ const key=state.route==='commerce'&&state.workspace==='real'?cloudUser()+'|'+state.query+'|'+(stockView.category||''):'';
  if(key===stockKey)return;
  const previousUser=stockKey.split('|')[0];stockKey=key;stockRequest++;clearTimeout(stockTimer);stockView.loading=false;stockView.page=0;stockView.result=null;stockView.error='';
+ if(!key||previousUser!==cloudUser()){stockView.categories=[];stockView.category='';stockView.categoryError='';}
  if(key&&cloudUser())stockTimer=setTimeout(()=>void refreshStocks(),previousUser===cloudUser()?250:0);
 }
 async function refreshStocks():Promise<void>{
  if(state.route!=='commerce'||state.workspace!=='real'||!cloudUser())return;
- clearTimeout(stockTimer);const request=++stockRequest,owner=cloudUser(),query=state.query,page=stockView.page;
+ clearTimeout(stockTimer);const request=++stockRequest,owner=cloudUser(),query=state.query,page=stockView.page,category=stockView.category||'';
  stockView.loading=true;stockView.error='';renderStockContent();
- try{const result=await readPohodaStocks(query,page);if(request!==stockRequest||owner!==cloudUser()||state.route!=='commerce')return;stockView.result=result;}
+ try{const [stocks,categories]=await Promise.allSettled([readPohodaStocks(query,page,category),readPohodaCategories()]);if(request!==stockRequest||owner!==cloudUser()||state.route!=='commerce')return;
+  if(categories.status==='fulfilled'){stockView.categories=categories.value;stockView.categoryError='';}else stockView.categoryError='Členenie sa nepodarilo načítať. Skúste Obnoviť.';
+  if(stocks.status==='rejected')throw stocks.reason;stockView.result=stocks.value;}
  catch(err){if(request===stockRequest)stockView.error=err instanceof Error?err.message:'Načítanie zlyhalo.';}
  finally{if(request===stockRequest){stockView.loading=false;renderStockContent();}}
 }
@@ -508,5 +513,5 @@ function renderStockContent():void{
  if(host)host.innerHTML=stocksPage(stockView,state.query,!!cloudUser(),state.workspace==='demo');
  if(focused){const replacement=document.querySelector<HTMLInputElement>('#page-search');replacement?.focus();if(pos!=null)try{replacement?.setSelectionRange(pos,pos);}catch{}}
 }
-setInterval(()=>{if(document.visibilityState==='visible'&&!stockView.loading&&!document.querySelector('#page-search:focus'))void refreshStocks();},60000);
+setInterval(()=>{if(document.visibilityState==='visible'&&!stockView.loading&&!document.querySelector('#page-search:focus, [data-stock-category]:focus'))void refreshStocks();},60000);
 window.addEventListener('online',()=>void refreshStocks());
