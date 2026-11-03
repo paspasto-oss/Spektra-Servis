@@ -6,7 +6,7 @@ import {listManuals} from './lib/manual-store.js';
 import {loadRecovery,loadSyncMeta} from './lib/store.js';
 import {oneDriveState,oneDriveAccountId,resumeOneDrive,uploadAttachment,attachmentBlob} from './lib/onedrive.js';
 import { oneDriveClientId, prepareOneDrive, saveOneDriveClientId, connectOneDrive, disconnectOneDrive, uploadOneDriveBackup } from './lib/onedrive.js';
-import { APPS, openIntegration, mapStocks, totals, type CostLine } from './lib/commerce.js';
+import { APPS, openIntegration, mapStocks, mergeStockCatalog, moveStock, totals, type CostLine } from './lib/commerce.js';
 import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
@@ -26,7 +26,7 @@ import { companyByIco } from './lib/company-register.js';
 import { editorContent, deviceOptions, type Editor, type EditorType } from './modules/editors.js';
 import { demoData } from './demo.js';
 
-const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['quotes','Cenové ponuky','euro'], ['rs2','RS2 revízie','shield'], ['spp','SPP revízie','file'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Sklad a kalkulácie','jobs'],['files','Súbory / OneDrive','upload']];
+const routes: [string, string, string][] = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['quotes','Cenové ponuky','euro'], ['rs2','RS2 revízie','shield'], ['spp','SPP revízie','file'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce','Zásoby','archive'],['files','Súbory / OneDrive','upload']];
 let data: Data = emptyData(), ready = false, busy = false, editor: Editor | null = null, dirty = false;
 let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: today(), month: today().slice(0, 7), calendarMode: 'week', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector<HTMLElement>('#app')!;
@@ -178,6 +178,7 @@ async function act(action: string, el: HTMLElement): Promise<void> {
     }finally{oneDriveBusy=false;buttons.forEach(b=>b.disabled=false);}return;
   }
   if (action === 'open-quotes' || action === 'open-rs2') { window.open(APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer'); return; }
+  if(action==='stock-edit'){showStock(id);return;}
   if (action === 'import-commerce') {
     if (state.workspace !== 'real') throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
     if (integrationBusy) throw Error('Dokončite prebiehajúce prepojenie.');
@@ -186,7 +187,7 @@ async function act(action: string, el: HTMLElement): Promise<void> {
       const result=await openIntegration('quotes','catalog') as {contacts:unknown;stocks:unknown};
       if(state.workspace!=='real') throw Error('Pracovný priestor sa zmenil. Prenos zopakujte.');
       const next=structuredClone(data), count=next.customers.length;
-      next.customers=mergeContacts(next.customers,result.contacts); next.stocks=mapStocks(result.stocks);next.catalogImportedAt=new Date().toISOString();
+      next.customers=mergeContacts(next.customers,result.contacts); next.stocks=mergeStockCatalog(next.stocks||[],mapStocks(result.stocks));next.catalogImportedAt=new Date().toISOString();
       await commit(next);message(`Prenesených ${next.stocks.length} skladových kariet a ${next.customers.length-count} nových kontaktov.`);
     } finally {integrationBusy=false;} return;
   }
@@ -403,7 +404,7 @@ function showCost():void {
 }
 document.addEventListener('input',event=>{
  const input=event.target as HTMLInputElement;
- if(input.id==='cost-search') {const q=input.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();const rows=q?(data.stocks||[]).filter(s=>q.split(/\s+/).every(w=>(s.code+' '+s.name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(w))).slice(0,15):[];const results=document.querySelector('#cost-results');if(results)results.innerHTML=rows.map(s=>button(s.code+' · '+s.name+' · '+money(s.sale),'cost-add','','btn secondary',`data-id="${e(s.id)}"`)).join('')||(q?'Žiadne položky. Načítajte sklad cez Ponuky / RS2.':'');return;}
+ if(input.id==='cost-search') {const q=input.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();const rows=q?(data.stocks||[]).filter(s=>q.split(/\s+/).every(w=>(s.code+' '+s.name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(w))).slice(0,15):[];const results=document.querySelector('#cost-results');if(results)results.innerHTML=rows.map(s=>button(s.code+' · '+s.name+' · '+money(s.sale),'cost-add','','btn secondary',`data-id="${e(s.id)}"`)).join('')||(q?'Žiadne položky. Načítajte sklad cez Zásoby.':'');return;}
  const form=input.closest<HTMLFormElement>('#cost-form');if(form){try{const lines=readCostRows(form,costLines);document.querySelector('#cost-summary')!.innerHTML=costSummary(lines);}catch{/* invalid in-progress input */}}
 });
 document.addEventListener('submit',event=>{
@@ -481,4 +482,23 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void syncT
 installCalendarSwipe(document,direction=>{
  const action=direction==='next'?'calendar-next':'calendar-prev',button=document.querySelector<HTMLElement>('[data-action="'+action+'"]');
  if((state.route==='calendar'||state.route==='home')&&button&&!dialog.open)void act(action,button).catch(fail);
+});
+
+let stockRevision=0,stockId='';
+function showStock(id:string):void {
+ if(dialog.open&&!closeEditor())return;
+ const stock=data.stocks?.find(s=>s.id===id);if(!stock)throw Error('Karta sa nenašla.');
+ stockId=id;stockRevision=data.revision;dirty=false;
+ const inv=stock.inventory;
+ dialog.innerHTML=`<form id="stock-form"><div class="modal-head"><h2>${e(stock.name)}</h2>${button('Zavrieť','close-editor')}</div><div class="modal-body"><div id="form-error" class="form-error" role="alert" hidden></div>
+ ${!inv?`<p>Nastavte skutočný počiatočný stav. Auto je samostatné umiestnenie.</p><label class="field">Sklad (${e(stock.unit)})<input name="warehouse" type="number" min="0" max="1000000" step="0.001" required value="${stock.available!==null&&stock.available>=0?stock.available:''}"></label><label class="field">Auto (${e(stock.unit)})<input name="vehicle" type="number" min="0" max="1000000" step="0.001" required value="0"></label>`:
+ `<p>Sklad: ${inv.warehouse} · Auto: ${inv.vehicle} ${e(stock.unit)}</p><label class="field">Pohyb<select name="movement"><option value="receipt">Príjem</option><option value="issue">Výdaj</option><option value="transfer">Presun na druhé miesto</option></select></label><label class="field">Miesto (pri presune odkiaľ)<select name="place"><option value="warehouse">Sklad</option><option value="vehicle">Auto</option></select></label><label class="field">Množstvo (${e(stock.unit)})<input name="qty" type="number" min="0.001" max="1000000" step="0.001" required></label><label class="field">Poznámka alebo číslo zákazky<input name="note" maxlength="400"></label><p class="tiny muted">Výdaj mení zásoby. Materiál do kalkulácie zákazky pridajte samostatne.</p><h3>Posledné pohyby</h3>${inv.history.slice(-20).reverse().map(h=>`<p class="tiny">${e(h)}</p>`).join('')}`}</div><div class="modal-footer">${button('Zrušiť','close-editor')}<button class="btn primary" type="submit">${inv?'Uložiť pohyb':'Uložiť počiatočný stav'}</button></div></form>`;
+ dialog.showModal();
+}
+document.addEventListener('submit',event=>{
+ const form=event.target as HTMLFormElement;if(form.id!=='stock-form')return;event.preventDefault();
+ void(async()=>{const f=new FormData(form),next=structuredClone(data),index=next.stocks?.findIndex(s=>s.id===stockId)??-1;if(index<0)throw Error('Karta sa nenašla.');const stock=next.stocks![index]!;
+ if(stock.inventory)next.stocks![index]=moveStock(stock,String(f.get('movement')),String(f.get('place')),Number(f.get('qty')),String(f.get('note')||'').trim());
+ else stock.inventory={warehouse:Number(f.get('warehouse')),vehicle:Number(f.get('vehicle')),history:[new Date().toISOString()+' · Počiatočný stav: sklad '+f.get('warehouse')+', auto '+f.get('vehicle')]};
+ await commit(next,stockRevision);dirty=false;closeEditor();message('Zásoby boli uložené.');})().catch(fail);
 });

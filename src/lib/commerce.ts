@@ -1,11 +1,31 @@
-export interface Stock { id: string; code: string; name: string; unit: string; sale: number | null; cost: number | null; vat: number | null; available: number | null; syncedAt: string }
+export interface Inventory { warehouse:number; vehicle:number; history:string[] }
+export function validateInventory(v:Inventory):Inventory {
+ if(!v || !Number.isFinite(v.warehouse)||!Number.isFinite(v.vehicle)||v.warehouse<0||v.vehicle<0||v.warehouse>1000000||v.vehicle>1000000||!Array.isArray(v.history)||v.history.length>10000||v.history.some(x=>typeof x!=="string"||x.length>1000))throw Error('Neplatná evidencia zásob.');
+ return {warehouse:v.warehouse,vehicle:v.vehicle,history:[...v.history]};
+}
+export function moveStock(stock:Stock, action:string, place:string, qty:number, note:string):Stock {
+ if(!['receipt','issue','transfer'].includes(action)||!['warehouse','vehicle'].includes(place)||!Number.isFinite(qty)||qty<=0||qty>1000000)throw Error('Skontrolujte pohyb a kladné množstvo.');
+ if(!stock.inventory&&(stock.available===null||stock.available<0))throw Error('Najprv nastavte počiatočný stav zásob.');
+ const inv=structuredClone(stock.inventory||{warehouse:stock.available!,vehicle:0,history:[]});
+ const from=place as 'warehouse'|'vehicle',to=from==='warehouse'?'vehicle':'warehouse';
+ if(action!=='receipt'&&inv[from]<qty)throw Error('Na vybranom mieste nie je dostatok materiálu.');
+ inv[from]=Math.round((inv[from]+(action==='receipt'?qty:-qty))*1000)/1000;
+ if(action==='transfer')inv[to]=Math.round((inv[to]+qty)*1000)/1000;
+ inv.history.push(new Date().toISOString()+' · '+({receipt:'Príjem',issue:'Výdaj',transfer:'Presun'}[action])+' · '+(from==='warehouse'?'Sklad':'Auto')+(action==='transfer'?' → '+(to==='warehouse'?'Sklad':'Auto'):'')+' · '+qty+' '+stock.unit+(note?' · '+note:''));
+ return {...stock,inventory:validateInventory(inv)};
+}
+export function mergeStockCatalog(existing:Stock[], incoming:Stock[]):Stock[] {
+ const old=new Map(existing.map(s=>[s.id,s]));
+ return [...incoming.map(s=>({...s,...(old.get(s.id)?.inventory?{inventory:old.get(s.id)!.inventory}:{})})),...existing.filter(s=>s.inventory&&!incoming.some(n=>n.id===s.id))];
+}
+export interface Stock { id: string; code: string; name: string; unit: string; sale: number | null; cost: number | null; vat: number | null; available: number | null; syncedAt: string; inventory?: Inventory }
 export interface CostLine { id: string; stockId: string; code: string; name: string; unit: string; kind: 'material' | 'labor' | 'transport'; qty: number; sale: number; cost: number | null; vat: number }
 const text = (v: unknown, max=400): string => { if(typeof v !== 'string' || v.length>max) throw Error('Neplatný text položky.'); return v; };
 const num = (v: unknown, max=1000000): number => { if(typeof v !== 'number' || !Number.isFinite(v) || v<0 || v>max) throw Error('Neplatná cena alebo množstvo.'); return v; };
 const optional = (v: unknown): number | null => v === null || v === undefined || v === '' ? null : num(Number(v));
 export function validateStocks(value: unknown): Stock[] {
  if(!Array.isArray(value) || value.length>20000) throw Error('Neplatný sklad.');
- const rows=value.map((s): Stock => ({id:text(s.id,100), code:text(s.code), name:text(s.name), unit:text(s.unit,40),sale:s.sale===null?null:num(s.sale),cost:s.cost===null?null:num(s.cost),vat:s.vat===null?null:num(s.vat,100),available:s.available===null?null:(typeof s.available==='number'&&Number.isFinite(s.available)&&Math.abs(s.available)<=1000000?s.available:(()=>{throw Error('Neplatný stav skladu.');})()),syncedAt:text(s.syncedAt,40)}));
+ const rows=value.map((s): Stock => ({id:text(s.id,100), code:text(s.code), name:text(s.name), unit:text(s.unit,40),sale:s.sale===null?null:num(s.sale),cost:s.cost===null?null:num(s.cost),vat:s.vat===null?null:num(s.vat,100),available:s.available===null?null:(typeof s.available==='number'&&Number.isFinite(s.available)&&Math.abs(s.available)<=1000000?s.available:(()=>{throw Error('Neplatný stav skladu.');})()),syncedAt:text(s.syncedAt,40),...(s.inventory===undefined?{}:{inventory:validateInventory(s.inventory)})}));
  if(rows.some(s=>!s.id || !s.name) || new Set(rows.map(s=>s.id)).size!==rows.length) throw Error('Sklad obsahuje chýbajúce alebo duplicitné karty.'); return rows;
 }
 export function mapStocks(value: unknown): Stock[] {

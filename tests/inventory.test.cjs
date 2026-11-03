@@ -1,0 +1,5 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');
+const {moveStock,validateStocks,mergeStockCatalog}=require('../.build/lib/commerce.js');
+const stock={id:'s',code:'A',name:'Rúra',unit:'m',sale:2,cost:1,vat:23,available:10,syncedAt:''};
+test('receipt, transfer and issue preserve totals and prevent negative stock',()=>{let s=moveStock(stock,'transfer','warehouse',3,'');assert.equal(s.inventory.warehouse,7);assert.equal(s.inventory.vehicle,3);s=moveStock(s,'issue','vehicle',2,'S-2026-0001');assert.equal(s.inventory.vehicle,1);s=moveStock(s,'receipt','warehouse',1.5,'');assert.equal(s.inventory.warehouse,8.5);assert.throws(()=>moveStock(s,'issue','vehicle',2,''));assert.throws(()=>moveStock(s,'receipt','warehouse',NaN,''));assert.deepEqual(validateStocks([s])[0],s);});
+test('catalog refresh retains local inventory and cards absent from import',()=>{const s=moveStock(stock,'receipt','warehouse',2,'');assert.deepEqual(mergeStockCatalog([s],[{...stock,sale:3}])[0].inventory,s.inventory);assert.equal(mergeStockCatalog([s],[]).length,1);assert.throws(()=>moveStock({...stock,available:null},'receipt','warehouse',1,''));});

@@ -163,7 +163,7 @@ const apps_js_1 = require("./modules/apps.js");
 const company_register_js_1 = require("./lib/company-register.js");
 const editors_js_1 = require("./modules/editors.js");
 const demo_js_1 = require("./demo.js");
-const routes = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['quotes', 'Cenové ponuky', 'euro'], ['rs2', 'RS2 revízie', 'shield'], ['spp', 'SPP revízie', 'file'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce', 'Sklad a kalkulácie', 'jobs'], ['files', 'Súbory / OneDrive', 'upload']];
+const routes = [['home', 'Prehľad', 'home'], ['jobs', 'Zákazky', 'jobs'], ['calendar', 'Kalendár', 'calendar'], ['customers', 'Adresár', 'customers'], ['quotes', 'Cenové ponuky', 'euro'], ['rs2', 'RS2 revízie', 'shield'], ['spp', 'SPP revízie', 'file'], ['knowledge', 'Knižnica znalostí', 'knowledge'], ['commerce', 'Zásoby', 'archive'], ['files', 'Súbory / OneDrive', 'upload']];
 let data = (0, domain_js_1.emptyData)(), ready = false, busy = false, editor = null, dirty = false;
 let state = { route: 'home', query: '', filter: '', customerTab: 'customers', selectedCustomer: '', date: (0, calendar_js_1.today)(), month: (0, calendar_js_1.today)().slice(0, 7), calendarMode: 'week', knowledgeTab: 'all', workspace: 'real' };
 const root = document.querySelector('#app');
@@ -476,6 +476,10 @@ async function act(action, el) {
         window.open(commerce_js_1.APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer');
         return;
     }
+    if (action === 'stock-edit') {
+        showStock(id);
+        return;
+    }
     if (action === 'import-commerce') {
         if (state.workspace !== 'real')
             throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
@@ -488,7 +492,7 @@ async function act(action, el) {
                 throw Error('Pracovný priestor sa zmenil. Prenos zopakujte.');
             const next = structuredClone(data), count = next.customers.length;
             next.customers = (0, commerce_js_2.mergeContacts)(next.customers, result.contacts);
-            next.stocks = (0, commerce_js_1.mapStocks)(result.stocks);
+            next.stocks = (0, commerce_js_1.mergeStockCatalog)(next.stocks || [], (0, commerce_js_1.mapStocks)(result.stocks));
             next.catalogImportedAt = new Date().toISOString();
             await commit(next);
             message(`Prenesených ${next.stocks.length} skladových kariet a ${next.customers.length - count} nových kontaktov.`);
@@ -1041,7 +1045,7 @@ document.addEventListener('input', event => {
         const rows = q ? (data.stocks || []).filter(s => q.split(/\s+/).every(w => (s.code + ' ' + s.name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(w))).slice(0, 15) : [];
         const results = document.querySelector('#cost-results');
         if (results)
-            results.innerHTML = rows.map(s => (0, ui_js_1.button)(s.code + ' · ' + s.name + ' · ' + (0, commerce_js_2.money)(s.sale), 'cost-add', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(s.id)}"`)).join('') || (q ? 'Žiadne položky. Načítajte sklad cez Ponuky / RS2.' : '');
+            results.innerHTML = rows.map(s => (0, ui_js_1.button)(s.code + ' · ' + s.name + ' · ' + (0, commerce_js_2.money)(s.sale), 'cost-add', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(s.id)}"`)).join('') || (q ? 'Žiadne položky. Načítajte sklad cez Zásoby.' : '');
         return;
     }
     const form = input.closest('#cost-form');
@@ -1261,6 +1265,42 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden)
     const action = direction === 'next' ? 'calendar-next' : 'calendar-prev', button = document.querySelector('[data-action="' + action + '"]');
     if ((state.route === 'calendar' || state.route === 'home') && button && !dialog.open)
         void act(action, button).catch(fail);
+});
+let stockRevision = 0, stockId = '';
+function showStock(id) {
+    if (dialog.open && !closeEditor())
+        return;
+    const stock = data.stocks?.find(s => s.id === id);
+    if (!stock)
+        throw Error('Karta sa nenašla.');
+    stockId = id;
+    stockRevision = data.revision;
+    dirty = false;
+    const inv = stock.inventory;
+    dialog.innerHTML = `<form id="stock-form"><div class="modal-head"><h2>${(0, ui_js_1.e)(stock.name)}</h2>${(0, ui_js_1.button)('Zavrieť', 'close-editor')}</div><div class="modal-body"><div id="form-error" class="form-error" role="alert" hidden></div>
+ ${!inv ? `<p>Nastavte skutočný počiatočný stav. Auto je samostatné umiestnenie.</p><label class="field">Sklad (${(0, ui_js_1.e)(stock.unit)})<input name="warehouse" type="number" min="0" max="1000000" step="0.001" required value="${stock.available !== null && stock.available >= 0 ? stock.available : ''}"></label><label class="field">Auto (${(0, ui_js_1.e)(stock.unit)})<input name="vehicle" type="number" min="0" max="1000000" step="0.001" required value="0"></label>` :
+        `<p>Sklad: ${inv.warehouse} · Auto: ${inv.vehicle} ${(0, ui_js_1.e)(stock.unit)}</p><label class="field">Pohyb<select name="movement"><option value="receipt">Príjem</option><option value="issue">Výdaj</option><option value="transfer">Presun na druhé miesto</option></select></label><label class="field">Miesto (pri presune odkiaľ)<select name="place"><option value="warehouse">Sklad</option><option value="vehicle">Auto</option></select></label><label class="field">Množstvo (${(0, ui_js_1.e)(stock.unit)})<input name="qty" type="number" min="0.001" max="1000000" step="0.001" required></label><label class="field">Poznámka alebo číslo zákazky<input name="note" maxlength="400"></label><p class="tiny muted">Výdaj mení zásoby. Materiál do kalkulácie zákazky pridajte samostatne.</p><h3>Posledné pohyby</h3>${inv.history.slice(-20).reverse().map(h => `<p class="tiny">${(0, ui_js_1.e)(h)}</p>`).join('')}`}</div><div class="modal-footer">${(0, ui_js_1.button)('Zrušiť', 'close-editor')}<button class="btn primary" type="submit">${inv ? 'Uložiť pohyb' : 'Uložiť počiatočný stav'}</button></div></form>`;
+    dialog.showModal();
+}
+document.addEventListener('submit', event => {
+    const form = event.target;
+    if (form.id !== 'stock-form')
+        return;
+    event.preventDefault();
+    void (async () => {
+        const f = new FormData(form), next = structuredClone(data), index = next.stocks?.findIndex(s => s.id === stockId) ?? -1;
+        if (index < 0)
+            throw Error('Karta sa nenašla.');
+        const stock = next.stocks[index];
+        if (stock.inventory)
+            next.stocks[index] = (0, commerce_js_1.moveStock)(stock, String(f.get('movement')), String(f.get('place')), Number(f.get('qty')), String(f.get('note') || '').trim());
+        else
+            stock.inventory = { warehouse: Number(f.get('warehouse')), vehicle: Number(f.get('vehicle')), history: [new Date().toISOString() + ' · Počiatočný stav: sklad ' + f.get('warehouse') + ', auto ' + f.get('vehicle')] };
+        await commit(next, stockRevision);
+        dirty = false;
+        closeEditor();
+        message('Zásoby boli uložené.');
+    })().catch(fail);
 });
 
 },
@@ -1819,11 +1859,38 @@ async function synchronize(choice) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.APPS = void 0;
+exports.validateInventory = validateInventory;
+exports.moveStock = moveStock;
+exports.mergeStockCatalog = mergeStockCatalog;
 exports.validateStocks = validateStocks;
 exports.mapStocks = mapStocks;
 exports.validateLines = validateLines;
 exports.totals = totals;
 exports.openIntegration = openIntegration;
+function validateInventory(v) {
+    if (!v || !Number.isFinite(v.warehouse) || !Number.isFinite(v.vehicle) || v.warehouse < 0 || v.vehicle < 0 || v.warehouse > 1000000 || v.vehicle > 1000000 || !Array.isArray(v.history) || v.history.length > 10000 || v.history.some(x => typeof x !== "string" || x.length > 1000))
+        throw Error('Neplatná evidencia zásob.');
+    return { warehouse: v.warehouse, vehicle: v.vehicle, history: [...v.history] };
+}
+function moveStock(stock, action, place, qty, note) {
+    if (!['receipt', 'issue', 'transfer'].includes(action) || !['warehouse', 'vehicle'].includes(place) || !Number.isFinite(qty) || qty <= 0 || qty > 1000000)
+        throw Error('Skontrolujte pohyb a kladné množstvo.');
+    if (!stock.inventory && (stock.available === null || stock.available < 0))
+        throw Error('Najprv nastavte počiatočný stav zásob.');
+    const inv = structuredClone(stock.inventory || { warehouse: stock.available, vehicle: 0, history: [] });
+    const from = place, to = from === 'warehouse' ? 'vehicle' : 'warehouse';
+    if (action !== 'receipt' && inv[from] < qty)
+        throw Error('Na vybranom mieste nie je dostatok materiálu.');
+    inv[from] = Math.round((inv[from] + (action === 'receipt' ? qty : -qty)) * 1000) / 1000;
+    if (action === 'transfer')
+        inv[to] = Math.round((inv[to] + qty) * 1000) / 1000;
+    inv.history.push(new Date().toISOString() + ' · ' + ({ receipt: 'Príjem', issue: 'Výdaj', transfer: 'Presun' }[action]) + ' · ' + (from === 'warehouse' ? 'Sklad' : 'Auto') + (action === 'transfer' ? ' → ' + (to === 'warehouse' ? 'Sklad' : 'Auto') : '') + ' · ' + qty + ' ' + stock.unit + (note ? ' · ' + note : ''));
+    return { ...stock, inventory: validateInventory(inv) };
+}
+function mergeStockCatalog(existing, incoming) {
+    const old = new Map(existing.map(s => [s.id, s]));
+    return [...incoming.map(s => ({ ...s, ...(old.get(s.id)?.inventory ? { inventory: old.get(s.id).inventory } : {}) })), ...existing.filter(s => s.inventory && !incoming.some(n => n.id === s.id))];
+}
 const text = (v, max = 400) => { if (typeof v !== 'string' || v.length > max)
     throw Error('Neplatný text položky.'); return v; };
 const num = (v, max = 1000000) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max)
@@ -1832,7 +1899,7 @@ const optional = (v) => v === null || v === undefined || v === '' ? null : num(N
 function validateStocks(value) {
     if (!Array.isArray(value) || value.length > 20000)
         throw Error('Neplatný sklad.');
-    const rows = value.map((s) => ({ id: text(s.id, 100), code: text(s.code), name: text(s.name), unit: text(s.unit, 40), sale: s.sale === null ? null : num(s.sale), cost: s.cost === null ? null : num(s.cost), vat: s.vat === null ? null : num(s.vat, 100), available: s.available === null ? null : (typeof s.available === 'number' && Number.isFinite(s.available) && Math.abs(s.available) <= 1000000 ? s.available : (() => { throw Error('Neplatný stav skladu.'); })()), syncedAt: text(s.syncedAt, 40) }));
+    const rows = value.map((s) => ({ id: text(s.id, 100), code: text(s.code), name: text(s.name), unit: text(s.unit, 40), sale: s.sale === null ? null : num(s.sale), cost: s.cost === null ? null : num(s.cost), vat: s.vat === null ? null : num(s.vat, 100), available: s.available === null ? null : (typeof s.available === 'number' && Number.isFinite(s.available) && Math.abs(s.available) <= 1000000 ? s.available : (() => { throw Error('Neplatný stav skladu.'); })()), syncedAt: text(s.syncedAt, 40), ...(s.inventory === undefined ? {} : { inventory: validateInventory(s.inventory) }) }));
     if (rows.some(s => !s.id || !s.name) || new Set(rows.map(s => s.id)).size !== rows.length)
         throw Error('Sklad obsahuje chýbajúce alebo duplicitné karty.');
     return rows;
@@ -2633,7 +2700,7 @@ const money = (n) => n === null ? 'Neznáme' : n.toLocaleString('sk-SK', { style
 exports.money = money;
 function commercePage(data, query) {
     const stock = data.stocks || [], words = (0, domain_js_1.normalize)(query).split(/\s+/).filter(Boolean), list = stock.filter(s => words.every(w => (0, domain_js_1.normalize)(s.code + ' ' + s.name).includes(w)));
-    return (0, ui_js_1.heading)('PREPOJENÉ APLIKÁCIE', 'Ponuky, RS2 a sklad', 'Existujúce aplikácie a materiál pre servisné zákazky.') + `<section class="panel commerce-panel"><div class="toolbar">${(0, ui_js_1.button)('Cenové ponuky', 'open-quotes', '', 'btn primary')}${(0, ui_js_1.button)('RS2 – revízne správy', 'open-rs2', '', 'btn secondary')}${(0, ui_js_1.button)('Načítať adresár a sklad z Ponúk', 'import-commerce', '', 'btn secondary')}</div><p>Otvorí sa aplikácia Cenové ponuky. Prihláste sa svojím existujúcim účtom a potvrďte prenos. Kontakty sa doplnia bez prepísania existujúcich kariet. Sklad sa obnoví ako celok.</p><p class="tiny muted">${stock.length} skladových kariet · Posledný prenos: ${(0, ui_js_1.e)(data.catalogImportedAt ? new Date(data.catalogImportedAt).toLocaleString('sk-SK') : 'zatiaľ neprebehol')}. Kópia zostáva v tomto zariadení a je súčasťou zálohy.</p></section><section class="panel commerce-panel"><h2>Sklad POHODA</h2>${(0, ui_js_1.searchBox)(query, 'Kód alebo názov materiálu…')}<p>${list.length} výsledkov, zobrazených najviac 30. Materiál pridáte cez Kalkuláciu servisu v uloženej zákazke.</p>${list.slice(0, 30).map(s => `<div class="stock-row"><div><strong>${(0, ui_js_1.e)(s.code)} · ${(0, ui_js_1.e)(s.name)}</strong><small>${(0, ui_js_1.e)(s.unit)} · sklad: ${s.available ?? 'neznámy'}</small></div><div>${(0, exports.money)(s.sale)}<small>predaj bez DPH · nákup ${(0, exports.money)(s.cost)}</small></div></div>`).join('')}</section>`;
+    return (0, ui_js_1.heading)('MATERIÁL A SKLAD', 'Zásoby', 'Materiál v sklade a aute, príjmy, výdaje a presuny.') + `<section class="panel commerce-panel"><div class="toolbar">${(0, ui_js_1.button)('Načítať adresár a sklad z Ponúk', 'import-commerce', '', 'btn secondary')}</div><p>Import aktualizuje karty a ceny. Vlastné stavy a história pohybov zostávajú zachované. Kontakty sa doplnia bez prepísania existujúcich kariet.</p><p class="tiny muted">${stock.length} skladových kariet · Posledný prenos: ${(0, ui_js_1.e)(data.catalogImportedAt ? new Date(data.catalogImportedAt).toLocaleString('sk-SK') : 'zatiaľ neprebehol')}</p></section><section class="panel commerce-panel"><h2>Materiál</h2>${(0, ui_js_1.searchBox)(query, 'Kód alebo názov materiálu…')}<p>${list.length} výsledkov, zobrazených najviac 30. Kalkuláciu práce a materiálu otvoríte v zákazke. Pohyby zásob sa zatiaľ neprenášajú späť do POHODY.</p>${list.slice(0, 30).map(s => `<div class="stock-row"><div><strong>${(0, ui_js_1.e)(s.code)} · ${(0, ui_js_1.e)(s.name)}</strong><small>${s.inventory ? `Sklad: ${s.inventory.warehouse} · Auto: ${s.inventory.vehicle}` : `Importovaný stav: ${s.available ?? 'neznámy'}`} ${(0, ui_js_1.e)(s.unit)}</small></div><div>${(0, exports.money)(s.sale)}<small>predaj bez DPH · nákup ${(0, exports.money)(s.cost)}</small>${(0, ui_js_1.button)('Pohyby a stav', 'stock-edit', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(s.id)}"`)}</div></div>`).join('') || '<p>Žiadny materiál. Načítajte skladové karty alebo upravte vyhľadávanie.</p>'}</section>`;
 }
 function mergeContacts(existing, input) {
     if (!Array.isArray(input) || input.length > 20000)
