@@ -1,13 +1,14 @@
+import {stocksPage,type StockView} from './modules/stocks.js';
 import {installCalendarSwipe} from './lib/calendar-swipe.js';
-import {initCloud,loginCloud,logoutCloud,enableCloud,synchronize,cloudState,cloudUser} from './lib/cloud.js';
+import {readPohodaStocks,initCloud,loginCloud,logoutCloud,enableCloud,synchronize,cloudState,cloudUser} from './lib/cloud.js';
 import {cloudSettings,filesPage} from './modules/cloud-settings.js';
 import {queuedFiles,queueFile,fileType,type PendingFile} from './lib/file-queue.js';
 import {listManuals} from './lib/manual-store.js';
 import {loadRecovery,loadSyncMeta} from './lib/store.js';
 import {oneDriveState,oneDriveAccountId,resumeOneDrive,uploadAttachment,attachmentBlob} from './lib/onedrive.js';
 import { oneDriveClientId, prepareOneDrive, saveOneDriveClientId, connectOneDrive, disconnectOneDrive, uploadOneDriveBackup } from './lib/onedrive.js';
-import { APPS, openIntegration, mapStocks, mergeStockCatalog, moveStock, totals, type CostLine } from './lib/commerce.js';
-import { commercePage, mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
+import { APPS, openIntegration, mapStocks, mergeStockCatalog, totals, type CostLine } from './lib/commerce.js';
+import { mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
 import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
 import { APP_VERSION, emptyData, stamp, validateData, nextNumber, normalize, sameCustomer, type Data, type Job, type Customer, type Device, type Tip, type SppReport } from './domain.js';
@@ -42,6 +43,7 @@ function fail(err: unknown): void { const text = err instanceof Error ? err.mess
 function nav(route: string): void { if(sppDirty&&route!==state.route&&!confirm('SPP správa obsahuje neuložené zmeny. Opustiť ju bez uloženia?'))return; sppDirty=false; state.route = route; state.query = ''; state.filter = ''; if (route !== 'jobs') state.selectedCustomer = ''; location.hash = route; render(); window.scrollTo({ top: 0 }); }
 function render(): void {
   if (!ready) return;
+  scheduleStocks();
   const sppFrame=document.querySelector<HTMLIFrameElement>('.spp-frame');
   if(state.route==='spp'&&sppFrame){
     sppFrame.contentWindow?.postMessage({type:'spp-state',customers:data.customers.filter(c=>!c.archived),reports:data.sppReports||[],settings:data.settings},location.origin);
@@ -50,7 +52,7 @@ function render(): void {
   sppDirty=false;
   const previousCalendar=document.querySelector<HTMLElement>('.time-calendar');
   const calendarPosition=previousCalendar?{top:previousCalendar.scrollTop,left:previousCalendar.scrollLeft,mode:previousCalendar.dataset.mode}:null;
-  const pages: Record<string, () => string> = { home: () => dashboard(data, state), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), quotes:()=>embeddedApp('quotes'), rs2:()=>embeddedApp('rs2'), spp:()=>sppRevisionPage(), knowledge: () => knowledgePage(data, state), commerce: () => commercePage(data,state.query), files:()=>state.workspace==='demo'?'<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>':filesPage(data,fileQueue.filter(f=>f.owner===cloudUser()),fileStatus), settings: () => settingsPage(data, state.workspace === 'demo') };
+  const pages: Record<string, () => string> = { home: () => dashboard(data, state), jobs: () => jobsPage(data, state), customers: () => customersPage(data, state), calendar: () => calendarPage(data, state), quotes:()=>embeddedApp('quotes'), rs2:()=>embeddedApp('rs2'), spp:()=>sppRevisionPage(), knowledge: () => knowledgePage(data, state), commerce: () => stocksPage(stockView,state.query,!!cloudUser(),state.workspace==='demo'), files:()=>state.workspace==='demo'?'<p>Prílohy sú dostupné vo vlastnom pracovnom priestore.</p>':filesPage(data,fileQueue.filter(f=>f.owner===cloudUser()),fileStatus), settings: () => settingsPage(data, state.workspace === 'demo') };
   const navigation = routes.map(([id, label, symbol]) => `<button type="button" data-action="route-${id}" class="nav-item ${state.route === id ? 'active' : ''}" ${state.route === id ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${id === 'jobs' ? `<b>${data.jobs.filter(j => !['done', 'cancelled'].includes(j.status)).length}</b>` : ''}</button>`).join('');
   root.innerHTML = `<aside class="sidebar"><a class="brand" href="#home" aria-label="Spektra Servis — úvod"><span class="brand-mark">S</span><span>SPEKTRA<small>SERVIS</small></span></a><div class="workspace-label">PRACOVNÝ PRIESTOR</div><nav aria-label="Hlavná navigácia">${navigation}</nav><div class="sidebar-bottom"><div class="local-status">${icon('shield')}<div><strong>Jeden technik</strong><span>Lokálne · bez paušálu</span></div></div><button class="nav-item ${state.route === 'settings' ? 'active' : ''}" data-action="route-settings">${icon('settings')}<span>Nastavenia a zálohy</span></button><div class="profile"><span class="avatar">${e(data.settings.technician.split(' ').map(s => s[0]).slice(0, 2).join(''))}</span><div><strong>${e(data.settings.technician)}</strong><small>Technik / správca</small></div></div></div></aside>
   <div class="main-shell ${state.route === 'spp' ? 'spp-shell' : state.route === 'home' ? 'calendar-shell home-shell' : state.route === 'calendar' ? 'calendar-shell' : ''}"><header class="topbar"><div class="breadcrumb">Spektra Servis <span>/</span> ${e(routes.find(r => r[0] === state.route)?.[1] || 'Nastavenia')}</div><div class="top-actions"><span class="save-state"><i></i>${e(cloudState.enabled?cloudState.status:(navigator.onLine?'Uložené v zariadení':'Offline · miestne dáta'))}</span><button class="icon-btn" data-action="install" aria-label="Inštalácia na plochu">${icon('download')}</button><button class="icon-btn" data-action="route-settings" aria-label="Nastavenia">${icon('settings')}</button></div></header>${state.workspace === 'demo' ? `<div class="demo-banner"><strong>UKÁŽKOVÉ ÚDAJE</strong><span>Toto nie sú skutoční zákazníci ani termíny.</span>${button('Späť k mojim dátam', 'exit-demo', '', 'btn ghost')}</div>` : `<div class="storage-banner">${icon('lock')}<span>${e(cloudState.enabled?cloudState.status:"Synchronizácia nie je zapnutá. Údaje sú uložené v tomto zariadení.")}</span><button class="text-link" data-action="route-settings">Zálohovať</button></div>`}<main id="main-content">${(pages[state.route] || pages.home)!()}</main><footer class="app-footer"><span>Spektra Servis <b>v${APP_VERSION}</b></span><span>${state.workspace === 'demo' ? 'Oddelená ukážka' : 'Samostatný pracovný priestor'} · Cenové ponuky, RS2 a SPP</span></footer></div><nav class="mobile-nav" aria-label="Mobilná navigácia">${navigation}</nav>`;
@@ -178,7 +180,7 @@ async function act(action: string, el: HTMLElement): Promise<void> {
     }finally{oneDriveBusy=false;buttons.forEach(b=>b.disabled=false);}return;
   }
   if (action === 'open-quotes' || action === 'open-rs2') { window.open(APPS[action === 'open-quotes' ? 'quotes' : 'rs2'], '_blank', 'noopener,noreferrer'); return; }
-  if(action==='stock-edit'){showStock(id);return;}
+  if(['stock-refresh','stock-prev','stock-next'].includes(action)){if(action==='stock-prev')stockView.page=Math.max(0,stockView.page-1);if(action==='stock-next')stockView.page++;if(action!=='stock-refresh')stockView.result=null;void refreshStocks();return;}
   if (action === 'import-commerce') {
     if (state.workspace !== 'real') throw Error('Prenos je dostupný iba v skutočnom pracovnom priestore.');
     if (integrationBusy) throw Error('Dokončite prebiehajúce prepojenie.');
@@ -484,21 +486,27 @@ installCalendarSwipe(document,direction=>{
  if((state.route==='calendar'||state.route==='home')&&button&&!dialog.open)void act(action,button).catch(fail);
 });
 
-let stockRevision=0,stockId='';
-function showStock(id:string):void {
- if(dialog.open&&!closeEditor())return;
- const stock=data.stocks?.find(s=>s.id===id);if(!stock)throw Error('Karta sa nenašla.');
- stockId=id;stockRevision=data.revision;dirty=false;
- const inv=stock.inventory;
- dialog.innerHTML=`<form id="stock-form"><div class="modal-head"><h2>${e(stock.name)}</h2>${button('Zavrieť','close-editor')}</div><div class="modal-body"><div id="form-error" class="form-error" role="alert" hidden></div>
- ${!inv?`<p>Nastavte skutočný počiatočný stav. Auto je samostatné umiestnenie.</p><label class="field">Sklad (${e(stock.unit)})<input name="warehouse" type="number" min="0" max="1000000" step="0.001" required value="${stock.available!==null&&stock.available>=0?stock.available:''}"></label><label class="field">Auto (${e(stock.unit)})<input name="vehicle" type="number" min="0" max="1000000" step="0.001" required value="0"></label>`:
- `<p>Sklad: ${inv.warehouse} · Auto: ${inv.vehicle} ${e(stock.unit)}</p><label class="field">Pohyb<select name="movement"><option value="receipt">Príjem</option><option value="issue">Výdaj</option><option value="transfer">Presun na druhé miesto</option></select></label><label class="field">Miesto (pri presune odkiaľ)<select name="place"><option value="warehouse">Sklad</option><option value="vehicle">Auto</option></select></label><label class="field">Množstvo (${e(stock.unit)})<input name="qty" type="number" min="0.001" max="1000000" step="0.001" required></label><label class="field">Poznámka alebo číslo zákazky<input name="note" maxlength="400"></label><p class="tiny muted">Výdaj mení zásoby. Materiál do kalkulácie zákazky pridajte samostatne.</p><h3>Posledné pohyby</h3>${inv.history.slice(-20).reverse().map(h=>`<p class="tiny">${e(h)}</p>`).join('')}`}</div><div class="modal-footer">${button('Zrušiť','close-editor')}<button class="btn primary" type="submit">${inv?'Uložiť pohyb':'Uložiť počiatočný stav'}</button></div></form>`;
- dialog.showModal();
+const stockView:StockView={result:null,loading:false,error:'',page:0};
+let stockKey='',stockRequest=0,stockTimer:ReturnType<typeof setTimeout>|undefined;
+function scheduleStocks():void{
+ const key=state.route==='commerce'&&state.workspace==='real'?cloudUser()+'|'+state.query:'';
+ if(key===stockKey)return;
+ const previousUser=stockKey.split('|')[0];stockKey=key;stockRequest++;clearTimeout(stockTimer);stockView.loading=false;stockView.page=0;stockView.result=null;stockView.error='';
+ if(key&&cloudUser())stockTimer=setTimeout(()=>void refreshStocks(),previousUser===cloudUser()?250:0);
 }
-document.addEventListener('submit',event=>{
- const form=event.target as HTMLFormElement;if(form.id!=='stock-form')return;event.preventDefault();
- void(async()=>{const f=new FormData(form),next=structuredClone(data),index=next.stocks?.findIndex(s=>s.id===stockId)??-1;if(index<0)throw Error('Karta sa nenašla.');const stock=next.stocks![index]!;
- if(stock.inventory)next.stocks![index]=moveStock(stock,String(f.get('movement')),String(f.get('place')),Number(f.get('qty')),String(f.get('note')||'').trim());
- else stock.inventory={warehouse:Number(f.get('warehouse')),vehicle:Number(f.get('vehicle')),history:[new Date().toISOString()+' · Počiatočný stav: sklad '+f.get('warehouse')+', auto '+f.get('vehicle')]};
- await commit(next,stockRevision);dirty=false;closeEditor();message('Zásoby boli uložené.');})().catch(fail);
-});
+async function refreshStocks():Promise<void>{
+ if(state.route!=='commerce'||state.workspace!=='real'||!cloudUser())return;
+ clearTimeout(stockTimer);const request=++stockRequest,owner=cloudUser(),query=state.query,page=stockView.page;
+ stockView.loading=true;stockView.error='';renderStockContent();
+ try{const result=await readPohodaStocks(query,page);if(request!==stockRequest||owner!==cloudUser()||state.route!=='commerce')return;stockView.result=result;}
+ catch(err){if(request===stockRequest)stockView.error=err instanceof Error?err.message:'Načítanie zlyhalo.';}
+ finally{if(request===stockRequest){stockView.loading=false;renderStockContent();}}
+}
+function renderStockContent():void{
+ if(state.route!=='commerce')return;
+ const host=document.querySelector('#main-content'),input=document.querySelector<HTMLInputElement>('#page-search'),focused=document.activeElement===input,pos=input?.selectionStart;
+ if(host)host.innerHTML=stocksPage(stockView,state.query,!!cloudUser(),state.workspace==='demo');
+ if(focused){const replacement=document.querySelector<HTMLInputElement>('#page-search');replacement?.focus();if(pos!=null)try{replacement?.setSelectionRange(pos,pos);}catch{}}
+}
+setInterval(()=>{if(document.visibilityState==='visible'&&!stockView.loading&&!document.querySelector('#page-search:focus'))void refreshStocks();},60000);
+window.addEventListener('online',()=>void refreshStocks());
