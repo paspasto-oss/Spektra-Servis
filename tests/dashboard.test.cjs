@@ -10,7 +10,7 @@ test('Home always shows the selected week with visits and quick actions',()=>{
  assert.ok(html.includes('data-mode="week"'));
  assert.ok(html.includes('Servis kotla'));
  assert.ok(html.includes('data-id="j"'));
- for(const action of ['new-job','route-quotes','route-rs2'])assert.ok(html.includes('data-action="'+action+'"'));
+ for(const action of ['new-job','route-quotes','route-revisions'])assert.ok(html.includes('data-action="'+action+'"'));
  assert.ok(!html.includes('Dobrý deň'));
  assert.ok(!html.includes('stats'));
 });
