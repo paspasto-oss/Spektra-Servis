@@ -45,6 +45,10 @@ function nav(route: string): void { if(sppDirty&&route!==state.route&&!confirm('
 function render(): void {
   if (!ready) return;
   scheduleStocks();
+  // Background saves and connectivity changes must not recreate an embedded
+  // editor: cross-origin focus cannot be inspected and its draft lives there.
+  const embedded=document.querySelector<HTMLIFrameElement>('.module-frame[data-agenda]');
+  if(embedded?.dataset.agenda===state.route){showSyncStatus();return;}
   const sppFrame=document.querySelector<HTMLIFrameElement>('.spp-frame');
   if(state.route==='spp'&&sppFrame){
     sppFrame.contentWindow?.postMessage({type:'spp-state',customers:data.customers.filter(c=>!c.archived),reports:data.sppReports||[],settings:data.settings},location.origin);

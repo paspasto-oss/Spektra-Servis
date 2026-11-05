@@ -198,6 +198,13 @@ function render() {
     if (!ready)
         return;
     scheduleStocks();
+    // Background saves and connectivity changes must not recreate an embedded
+    // editor: cross-origin focus cannot be inspected and its draft lives there.
+    const embedded = document.querySelector('.module-frame[data-agenda]');
+    if (embedded?.dataset.agenda === state.route) {
+        showSyncStatus();
+        return;
+    }
     const sppFrame = document.querySelector('.spp-frame');
     if (state.route === 'spp' && sppFrame) {
         sppFrame.contentWindow?.postMessage({ type: 'spp-state', customers: data.customers.filter(c => !c.archived), reports: data.sppReports || [], settings: data.settings }, location.origin);
@@ -1749,6 +1756,7 @@ exports.enableCloud = enableCloud;
 exports.synchronize = synchronize;
 exports.readPohodaStocks = readPohodaStocks;
 exports.readPohodaCategories = readPohodaCategories;
+const shared_contact_js_1 = require("./shared-contact.js");
 const pohoda_stock_js_1 = require("./pohoda-stock.js");
 const domain_js_1 = require("../domain.js");
 const sync_merge_js_1 = require("./sync-merge.js");
@@ -1802,19 +1810,27 @@ function contactKeys(c) {
         keys.push('na:' + name + '|' + address);
     return keys;
 }
-async function reconcileSharedCustomers(input) {
+async function reconcileSharedCustomers(input, base, choice) {
     if (!user)
-        return input;
-    const c = await sdk();
-    const { data: rows, error } = await c.from('customers').select('id,name,company,ico,dic,ic_dph,phone,email,address,notes,archived,created_at,updated_at');
-    if (error)
-        throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
+        return { data: input, conflicts: [] };
+    const owner = user.id, c = await sdk(), rows = [], conflicts = [];
+    for (let offset = 0;; offset += 500) {
+        const { data: page, error } = await c.from('customers').select('id,name,company,ico,dic,ic_dph,phone,email,address,street,city,notes,archived,created_at,updated_at').order('id').range(offset, offset + 499);
+        if (error)
+            throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
+        rows.push(...(page || []));
+        if (!page || page.length < 500)
+            break;
+    }
+    if (user?.id !== owner)
+        throw Error('Účet sa zmenil počas synchronizácie.');
     const next = structuredClone(input), byKey = new Map();
     for (const row of rows || [])
         for (const key of contactKeys({ name: row.name || '', company: row.company || '', phone: row.phone || '', email: row.email || '', address: row.address || '' }))
             if (!byKey.has(key))
                 byKey.set(key, row);
     for (const local of [...next.customers]) {
+        const originalId = local.id;
         const remote = (rows || []).find((row) => row.id === local.id) || contactKeys(local).map(key => byKey.get(key)).find(Boolean);
         if (remote && remote.id !== local.id) {
             for (const d of next.devices)
@@ -1829,20 +1845,17 @@ async function reconcileSharedCustomers(input) {
             local.id = remote.id;
         }
         if (remote) {
-            // Modules may save only part of a contact. Keep details supplied by another module.
-            const shared = { name: remote.name || '', company: remote.company || '', ico: remote.ico || '', dic: remote.dic || '', icDph: remote.ic_dph || '', phone: remote.phone || '', email: remote.email || '', address: remote.address || '' };
-            const remoteNewer = Date.parse(remote.updated_at || '') > Date.parse(local.updatedAt || '');
-            for (const key of ['name', 'company', 'ico', 'dic', 'icDph', 'phone', 'email', 'address'])
-                local[key] = remoteNewer ? (shared[key] || local[key] || '') : (local[key] || shared[key] || '');
-            if (remoteNewer)
-                Object.assign(local, { notes: remote.notes || local.notes || '', archived: !!remote.archived, createdAt: remote.created_at || local.createdAt, updatedAt: remote.updated_at || local.updatedAt });
+            const baseline = base.customers.find(x => x.id === local.id) || base.customers.find(x => x.id === originalId);
+            const merged = (0, shared_contact_js_1.mergeSharedContact)(local, (0, shared_contact_js_1.sharedContact)(remote), baseline, choice);
+            Object.assign(local, merged.contact);
+            conflicts.push(...merged.conflicts);
         }
     }
-    for (const remote of rows || [])
+    for (const remote of rows)
         if (!next.customers.some(x => x.id === remote.id))
-            next.customers.push({ id: remote.id, name: remote.name || '', company: remote.company || '', ico: remote.ico || '', dic: remote.dic || '', icDph: remote.ic_dph || '', phone: remote.phone || '', email: remote.email || '', address: remote.address || '', notes: remote.notes || '', archived: !!remote.archived, createdAt: remote.created_at || new Date().toISOString(), updatedAt: remote.updated_at || new Date().toISOString() });
+            next.customers.push((0, shared_contact_js_1.sharedContact)(remote));
     // Several local contacts may resolve to the same shared customer ID.
-    // Collapse them before UPSERT and before saving the synchronized workspace.
+    // Collapse them before writing and before saving the synchronized workspace.
     const unique = new Map();
     for (const contact of next.customers) {
         const previous = unique.get(contact.id);
@@ -1861,13 +1874,26 @@ async function reconcileSharedCustomers(input) {
         unique.set(contact.id, merged);
     }
     next.customers = [...unique.values()];
-    const payload = next.customers.map(x => ({ id: x.id, name: x.name || x.company || 'Bez mena', company: x.company || null, ico: x.ico || null, dic: x.dic || null, ic_dph: x.icDph || null, phone: x.phone || null, email: x.email || null, address: x.address || null, notes: x.notes || null, archived: x.archived, created_at: x.createdAt, updated_at: x.updatedAt, updated_by: user.id, source_app: 'servis' }));
-    if (payload.length) {
-        const written = await c.from('customers').upsert(payload, { onConflict: 'id' });
-        if (written.error)
-            throw Error('Spoločný adresár sa nepodarilo uložiť. Miestne údaje zostali zachované.');
+    if (conflicts.length && !choice)
+        return { data: next, conflicts };
+    // Never rewrite unchanged contacts. Compare-and-swap protects another agenda's
+    // edit made after the read; the next sync merges it against the same baseline.
+    for (const x of next.customers) {
+        const remote = rows.find(row => row.id === x.id);
+        if (remote && (0, shared_contact_js_1.sameContactDetails)(x, (0, shared_contact_js_1.sharedContact)(remote))) {
+            x.updatedAt = remote.updated_at;
+            continue;
+        }
+        if (user?.id !== owner)
+            throw Error('Účet sa zmenil počas synchronizácie.');
+        const payload = { name: x.name || x.company || 'Bez mena', company: x.company || null, ico: x.ico || null, dic: x.dic || null, ic_dph: x.icDph || null, phone: x.phone || null, email: x.email || null, address: x.address || null, notes: x.notes || null, archived: x.archived, updated_at: new Date().toISOString(), updated_by: owner, source_app: 'servis', ...(remote && x.address !== (0, shared_contact_js_1.sharedContact)(remote).address ? { street: null, city: null } : {}) };
+        const query = remote ? c.from('customers').update(payload).eq('id', x.id).eq('updated_at', remote.updated_at) : c.from('customers').insert({ ...payload, id: x.id, created_at: x.createdAt, created_by: owner });
+        const written = await query.select('id,updated_at').maybeSingle();
+        if (written.error || !written.data)
+            throw Error('Adresár sa medzitým zmenil alebo nie je dostupný. Miestne údaje zostali uložené; synchronizáciu zopakujem.');
+        x.updatedAt = written.data.updated_at;
     }
-    return next;
+    return { data: next, conflicts };
 }
 /** Persist remote baseline and local result in ONE transaction: crash/retry cannot lose pending edits. */
 async function synchronize(choice) {
@@ -1903,7 +1929,13 @@ async function synchronize(choice) {
     }
     if (choice)
         await (0, store_js_1.recoverySnapshot)(local);
-    merged.data = await reconcileSharedCustomers(merged.data);
+    const shared = await reconcileSharedCustomers(merged.data, meta.base, choice);
+    exports.cloudState.conflicts = shared.conflicts;
+    if (shared.conflicts.length && !choice) {
+        exports.cloudState.status = 'Konflikt adresára · vyberte verziu v Nastaveniach';
+        return;
+    }
+    merged.data = shared.data;
     let remoteRevision = revision;
     if (!result.data || !(0, sync_merge_js_1.equal)((0, sync_merge_js_1.syncPayload)(merged.data), (0, sync_merge_js_1.syncPayload)(remote))) {
         const sent = await c.rpc('servis_sync_write', { expected_revision: revision, new_payload: (0, sync_merge_js_1.syncPayload)(merged.data) });
@@ -2605,6 +2637,49 @@ function stockCategoryFilter(category) {
 }
 
 },
+"lib/shared-contact.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.contactFields = void 0;
+exports.sharedContact = sharedContact;
+exports.sameContactDetails = sameContactDetails;
+exports.mergeSharedContact = mergeSharedContact;
+exports.contactFields = ['name', 'company', 'ico', 'dic', 'icDph', 'phone', 'email', 'address', 'notes', 'archived'];
+function sharedContact(row) {
+    return { id: row.id, name: row.name || '', company: row.company || '', ico: row.ico || '', dic: row.dic || '', icDph: row.ic_dph || '', phone: row.phone || '', email: row.email || '', address: row.address || [row.street, row.city].filter(Boolean).join(', '), notes: row.notes || '', archived: !!row.archived, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+/** Compare business fields, not timestamps or the app that last wrote the record. */
+function sameContactDetails(a, b) {
+    return exports.contactFields.every(key => (a[key] ?? '') === (b[key] ?? ''));
+}
+function mergeSharedContact(local, remote, base, choice) {
+    const contact = { ...local, id: remote.id }, conflicts = [];
+    const newer = Date.parse(remote.updatedAt) > Date.parse(local.updatedAt) ? remote : local;
+    for (const key of exports.contactFields) {
+        const l = local[key] ?? '', r = remote[key] ?? '', b = base?.[key] ?? '';
+        let value;
+        if (l === r)
+            value = l;
+        else if (base && l === b)
+            value = r;
+        else if (base && r === b)
+            value = l;
+        else if (!base) {
+            // First connection: older modules may only have saved a partial contact.
+            value = key === 'archived' ? newer[key] : (newer[key] || local[key] || remote[key] || '');
+        }
+        else {
+            conflicts.push('adresar/' + remote.id + '/' + key);
+            value = choice === 'remote' ? r : l;
+        }
+        Object.assign(contact, { [key]: value });
+    }
+    contact.createdAt = remote.createdAt || local.createdAt;
+    contact.updatedAt = newer.updatedAt;
+    return { contact, conflicts };
+}
+
+},
 "lib/store.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -2736,7 +2811,7 @@ const commerce_js_1 = require("../lib/commerce.js");
 const ui_js_1 = require("../ui.js");
 function embeddedApp(kind) {
     const title = kind === 'quotes' ? 'Cenové ponuky' : 'RS2 – revízne správy';
-    return (0, ui_js_1.heading)('SPEKTRA · JEDNA APLIKÁCIA', title, kind === 'quotes' ? 'Tvorba ponúk, obhliadky a PDF dokumenty.' : 'Revízne správy a spoločný adresár zákazníkov.') + `<section class="panel app-module"><div class="module-bar"><strong>${(0, ui_js_1.e)(title)}</strong><a class="btn secondary" href="${(0, ui_js_1.e)(commerce_js_1.APPS[kind])}" target="_blank" rel="noopener noreferrer">Otvoriť na celej obrazovke</a></div><iframe class="module-frame" src="${(0, ui_js_1.e)(commerce_js_1.APPS[kind])}" title="${(0, ui_js_1.e)(title)}" loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe></section>`;
+    return (0, ui_js_1.heading)('SPEKTRA · JEDNA APLIKÁCIA', title, kind === 'quotes' ? 'Tvorba ponúk, obhliadky a PDF dokumenty.' : 'Revízne správy a spoločný adresár zákazníkov.') + `<section class="panel app-module"><div class="module-bar"><strong>${(0, ui_js_1.e)(title)}</strong><a class="btn secondary" href="${(0, ui_js_1.e)(commerce_js_1.APPS[kind])}" target="_blank" rel="noopener noreferrer">Otvoriť na celej obrazovke</a></div><iframe class="module-frame" data-agenda="${kind}" src="${(0, ui_js_1.e)(commerce_js_1.APPS[kind])}" title="${(0, ui_js_1.e)(title)}" loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe></section>`;
 }
 function sppRevisionPage() {
     return `<section class="panel app-module"><iframe class="module-frame spp-frame" src="./spp-app.html" title="SPP – revízne správy" loading="eager" referrerpolicy="same-origin"></iframe></section>`;

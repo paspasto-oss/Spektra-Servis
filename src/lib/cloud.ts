@@ -1,3 +1,4 @@
+import {sharedContact,mergeSharedContact,sameContactDetails} from './shared-contact.js';
 import {queryPohodaStocks,queryStockCategories,type StockCategory,type StockPage} from './pohoda-stock.js';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { validateData, normalize, customerPhoneKey, type Data } from '../domain.js';
@@ -28,14 +29,19 @@ function contactKeys(c:{name:string;company:string;phone:string;email:string;add
  if(name&&!phone&&!email&&address)keys.push('na:'+name+'|'+address);
  return keys;
 }
-async function reconcileSharedCustomers(input:Data):Promise<Data>{
- if(!user)return input;const c=await sdk();
- const {data:rows,error}=await c.from('customers').select('id,name,company,ico,dic,ic_dph,phone,email,address,notes,archived,created_at,updated_at');
- if(error)throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
+async function reconcileSharedCustomers(input:Data,base:Data,choice?:ConflictChoice):Promise<{data:Data;conflicts:string[]}>{
+ if(!user)return {data:input,conflicts:[]};const owner=user.id,c=await sdk(),rows:any[]=[],conflicts:string[]=[];
+ for(let offset=0;;offset+=500){
+  const {data:page,error}=await c.from('customers').select('id,name,company,ico,dic,ic_dph,phone,email,address,street,city,notes,archived,created_at,updated_at').order('id').range(offset,offset+499);
+  if(error)throw Error('Spoločný adresár sa nepodarilo načítať. Miestne údaje zostali zachované.');
+  rows.push(...(page||[]));if(!page||page.length<500)break;
+ }
+ if(user?.id!==owner)throw Error('Účet sa zmenil počas synchronizácie.');
  const next=structuredClone(input),byKey=new Map<string,any>();
  for(const row of rows||[])for(const key of contactKeys({name:row.name||'',company:row.company||'',phone:row.phone||'',email:row.email||'',address:row.address||''}))if(!byKey.has(key))byKey.set(key,row);
 
  for(const local of [...next.customers]){
+  const originalId=local.id;
   const remote=(rows||[]).find((row:any)=>row.id===local.id)||contactKeys(local).map(key=>byKey.get(key)).find(Boolean);
   if(remote&&remote.id!==local.id){
    for(const d of next.devices)if(d.customerId===local.id)d.customerId=remote.id;
@@ -44,17 +50,15 @@ async function reconcileSharedCustomers(input:Data):Promise<Data>{
    local.id=remote.id;
   }
   if(remote){
-   // Modules may save only part of a contact. Keep details supplied by another module.
-   const shared={name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||''};
-   const remoteNewer=Date.parse(remote.updated_at||'')>Date.parse(local.updatedAt||'');
-   for(const key of ['name','company','ico','dic','icDph','phone','email','address'] as const)local[key]=remoteNewer?(shared[key]||local[key]||''):(local[key]||shared[key]||'');
-   if(remoteNewer)Object.assign(local,{notes:remote.notes||local.notes||'',archived:!!remote.archived,createdAt:remote.created_at||local.createdAt,updatedAt:remote.updated_at||local.updatedAt});
+   const baseline=base.customers.find(x=>x.id===local.id)||base.customers.find(x=>x.id===originalId);
+   const merged=mergeSharedContact(local,sharedContact(remote),baseline,choice);
+   Object.assign(local,merged.contact);conflicts.push(...merged.conflicts);
   }
 
  }
- for(const remote of rows||[])if(!next.customers.some(x=>x.id===remote.id))next.customers.push({id:remote.id,name:remote.name||'',company:remote.company||'',ico:remote.ico||'',dic:remote.dic||'',icDph:remote.ic_dph||'',phone:remote.phone||'',email:remote.email||'',address:remote.address||'',notes:remote.notes||'',archived:!!remote.archived,createdAt:remote.created_at||new Date().toISOString(),updatedAt:remote.updated_at||new Date().toISOString()});
+ for(const remote of rows)if(!next.customers.some(x=>x.id===remote.id))next.customers.push(sharedContact(remote));
  // Several local contacts may resolve to the same shared customer ID.
- // Collapse them before UPSERT and before saving the synchronized workspace.
+ // Collapse them before writing and before saving the synchronized workspace.
  const unique=new Map<string,Data['customers'][number]>();
  for(const contact of next.customers){
   const previous=unique.get(contact.id);
@@ -68,9 +72,20 @@ async function reconcileSharedCustomers(input:Data):Promise<Data>{
   unique.set(contact.id,merged);
  }
  next.customers=[...unique.values()];
- const payload=next.customers.map(x=>({id:x.id,name:x.name||x.company||'Bez mena',company:x.company||null,ico:x.ico||null,dic:x.dic||null,ic_dph:x.icDph||null,phone:x.phone||null,email:x.email||null,address:x.address||null,notes:x.notes||null,archived:x.archived,created_at:x.createdAt,updated_at:x.updatedAt,updated_by:user!.id,source_app:'servis'}));
- if(payload.length){const written=await c.from('customers').upsert(payload,{onConflict:'id'});if(written.error)throw Error('Spoločný adresár sa nepodarilo uložiť. Miestne údaje zostali zachované.');}
- return next;
+ if(conflicts.length&&!choice)return {data:next,conflicts};
+ // Never rewrite unchanged contacts. Compare-and-swap protects another agenda's
+ // edit made after the read; the next sync merges it against the same baseline.
+ for(const x of next.customers){
+  const remote=rows.find(row=>row.id===x.id);
+  if(remote&&sameContactDetails(x,sharedContact(remote))) {x.updatedAt=remote.updated_at;continue;}
+  if(user?.id!==owner)throw Error('Účet sa zmenil počas synchronizácie.');
+  const payload={name:x.name||x.company||'Bez mena',company:x.company||null,ico:x.ico||null,dic:x.dic||null,ic_dph:x.icDph||null,phone:x.phone||null,email:x.email||null,address:x.address||null,notes:x.notes||null,archived:x.archived,updated_at:new Date().toISOString(),updated_by:owner,source_app:'servis',...(remote&&x.address!==sharedContact(remote).address?{street:null,city:null}:{})};
+  const query=remote?c.from('customers').update(payload).eq('id',x.id).eq('updated_at',remote.updated_at):c.from('customers').insert({...payload,id:x.id,created_at:x.createdAt,created_by:owner});
+  const written=await query.select('id,updated_at').maybeSingle();
+  if(written.error||!written.data)throw Error('Adresár sa medzitým zmenil alebo nie je dostupný. Miestne údaje zostali uložené; synchronizáciu zopakujem.');
+  x.updatedAt=written.data.updated_at;
+ }
+ return {data:next,conflicts};
 }
 /** Persist remote baseline and local result in ONE transaction: crash/retry cannot lose pending edits. */
 export async function synchronize(choice?:ConflictChoice):Promise<Data|undefined>{
@@ -89,7 +104,10 @@ export async function synchronize(choice?:ConflictChoice):Promise<Data|undefined
  cloudState.conflicts=merged.conflicts;
  if(merged.conflicts.length&&!choice){cloudState.status='Konflikt úprav · vyberte verziu v Nastaveniach';return;}
  if(choice)await recoverySnapshot(local);
- merged.data=await reconcileSharedCustomers(merged.data);
+ const shared=await reconcileSharedCustomers(merged.data,meta.base,choice);
+ cloudState.conflicts=shared.conflicts;
+ if(shared.conflicts.length&&!choice){cloudState.status='Konflikt adresára · vyberte verziu v Nastaveniach';return;}
+ merged.data=shared.data;
  let remoteRevision=revision;
  if(!result.data||!equal(syncPayload(merged.data),syncPayload(remote))){
   const sent=await c.rpc('servis_sync_write',{expected_revision:revision,new_payload:syncPayload(merged.data)});

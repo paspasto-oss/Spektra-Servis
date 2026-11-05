@@ -5,20 +5,20 @@ const fields=['name','company','ico','dic','icDph','phone','email','address'];
 const first='2026-01-01T00:00:00Z',last='2026-02-01T00:00:00Z';
 async function syncContact(local,remote){
  let workspace={revision:1,customers:[{id:'customer-1',name:'Ján Test',company:'',ico:'',dic:'',icDph:'',phone:'',email:'',address:'',notes:'',archived:false,createdAt:first,updatedAt:first,...local}],devices:[],jobs:[],sppReports:[]},written;
- const meta={owner:'owner-1',enabled:true,base:{},remoteRevision:0};
+ const meta={owner:'owner-1',enabled:true,base:{customers:[]},remoteRevision:0};
  const sdk={auth:{onAuthStateChange(){},getSession:async()=>({data:{session:{user:{id:'owner-1',email:'test@example.test'}}}})},
- from(table){return table==='customers'?{select:async()=>({data:[{id:'customer-1',name:'Ján Test',created_at:first,updated_at:first,...remote}],error:null}),upsert:async rows=>{written=rows;return {error:null};}}:{select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})})};},
+ from(table){return table==='customers'?{select:()=>({order:()=>({range:async()=>({data:[{id:'customer-1',name:'Ján Test',created_at:first,updated_at:first,...remote}],error:null})})}),update:payload=>{written=[payload];const query={eq:()=>query,select:()=>query,maybeSingle:async()=>({data:{id:'customer-1',updated_at:payload.updated_at},error:null})};return query;}}:{select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})})};},
  rpc:async()=>({data:1,error:null})};
  const store={load:async()=>structuredClone(workspace),loadSyncMeta:async()=>meta,recoverySnapshot:async()=>{},save:async(_space,data)=>workspace=structuredClone(data)};
  const domain={normalize:s=>s.toLowerCase(),customerPhoneKey:s=>s.replace(/\\D/g,''),validateData:x=>x};
  const merge={equal:(x,y)=>JSON.stringify(x)===JSON.stringify(y),mergeData:(_base,local)=>({data:structuredClone(local),conflicts:[]}),syncPayload:x=>x,initialBase:()=>({})};
  const module={exports:{}};
  vm.runInNewContext(fs.readFileSync(require.resolve('../.build/lib/cloud.js'),'utf8'),{
- module,exports:module.exports,require:id=>id.includes('domain')?domain:id.includes('sync-merge')?merge:store,
+ module,exports:module.exports,require:id=>id.includes('shared-contact')?require('../.build/lib/shared-contact.js'):id.includes('domain')?domain:id.includes('sync-merge')?merge:store,
  window:{supabase:{createClient:()=>sdk}},navigator:{onLine:true},structuredClone,Date,Map,Set,Error,Promise,setTimeout,clearTimeout
  });
  await module.exports.initCloud();await module.exports.synchronize();
- return {contact:workspace.customers[0],written:written[0]};
+ return {contact:workspace.customers[0],written:written?.[0]||remote};
 }
 test('newer partial contact keeps phone and complete identity from another module',async()=>{
  const complete={phone:'+421900123456',email:'jan@example.test',address:'Rajec 12',company:'Test s.r.o.',ico:'12345678',dic:'2020000000',icDph:'SK2020000000'};
