@@ -139,6 +139,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #c20000;outline-offset:3p
 @media(max-width:760px){.streamlined-shell{margin:0;padding-bottom:0}.streamlined-shell>.topbar{display:flex;height:58px;flex:none;padding:0 14px}.streamlined-shell .brand{font-size:16px;gap:8px;padding:0}.streamlined-shell .brand small{display:none}.streamlined-shell .brand-mark{width:30px;height:30px;font-size:22px;border-radius:9px}.streamlined-shell .save-state{display:none}.agenda-shell{padding:10px 10px 8px;flex:none}.agenda-nav{gap:6px}.agenda-button{padding:9px 2px;min-height:57px;flex-direction:column;gap:4px;text-align:center;border-radius:8px}.agenda-button strong{font-size:10px;line-height:1.2}.agenda-button small{display:none}.agenda-button .icon{width:18px;height:18px}.streamlined-shell.calendar-shell{height:100dvh;min-height:0;overflow:hidden}.streamlined-shell.calendar-shell #main-content{padding:0;max-width:none}.streamlined-shell.calendar-shell>.storage-banner{display:none}.streamlined-shell .home-shortcuts{padding:5px 10px;justify-content:flex-end;gap:6px}.streamlined-shell .home-shortcuts .btn{min-height:36px;padding:6px 12px}.streamlined-shell #main-content{padding:20px 14px}.agenda-options{gap:6px;margin-bottom:16px}.agenda-options .btn{padding:8px 10px}.agenda-choices{grid-template-columns:1fr}.more-navigation summary{padding:7px 10px}.streamlined-shell .storage-banner{padding-left:14px}.streamlined-shell .app-footer{padding-bottom:20px}}
 @media print{.agenda-shell,.agenda-options{display:none!important}}
 .streamlined-shell.spp-shell #main-content{flex-direction:column;padding:0}.streamlined-shell.spp-shell .agenda-options{flex:none;padding:8px 16px;margin:0}.streamlined-shell.spp-shell .agenda-shell{flex:none}.streamlined-shell.spp-shell>.topbar{flex:none}@media(max-width:760px){.streamlined-shell.spp-shell{height:100dvh}}
+/* Google calendar integration */
+.google-status{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 16px;margin-bottom:16px;background:#fff;border:1px solid var(--border,#dbe3ed);border-radius:12px}.google-status p{margin:0;flex:1;min-width:200px}.google-check{display:flex;align-items:center;gap:10px;margin:14px 0}.google-check input{width:20px;height:20px;flex-shrink:0}.google-redirect{display:block;overflow-wrap:anywhere;margin:12px 0;padding:12px;background:#f0f4f8}.event-google{background:#e8f0fe!important;border-left:3px solid #1a73e8!important;color:#153764!important}.google-event-detail{max-width:660px;width:calc(100vw - 32px);border:1px solid #dbe3ed;border-radius:16px;padding:24px}.google-event-detail::backdrop{background:#001b36aa}.google-event-detail .toolbar{flex-wrap:wrap}.google-event-detail h2{overflow-wrap:anywhere}.google-reply{padding:10px 12px;border-radius:8px;background:#f0f4f8;margin:12px 0}.calendar-google-link{font-size:13px}.google-message-warning{color:#9d3905}
 </style></head><body><a class="skip-link" href="#main-content">Preskočiť na obsah</a><div id="app"><main class="fatal"><h1>Spektra Servis</h1><p>Otváram váš pracovný priestor…</p></main></div><dialog id="editor" aria-labelledby="editor-title"></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div><div id="update-notice" class="update-notice" hidden></div><noscript>Na spustenie aplikácie je potrebný JavaScript. Údaje sa neodosielajú do cloudu.</noscript><script>(function(){'use strict';const modules={"app.js":function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -154,7 +156,7 @@ const onedrive_js_1 = require("./lib/onedrive.js");
 const onedrive_js_2 = require("./lib/onedrive.js");
 const commerce_js_1 = require("./lib/commerce.js");
 const commerce_js_2 = require("./modules/commerce.js");
-const google_calendar_js_1 = require("./lib/google-calendar.js");
+const google_sync_js_1 = require("./lib/google-sync.js");
 const manuals_js_1 = require("./modules/manuals.js");
 const domain_js_1 = require("./domain.js");
 const calendar_js_1 = require("./lib/calendar.js");
@@ -177,6 +179,7 @@ let state = { route: 'home', query: '', filter: '', customerTab: 'customers', se
 const root = document.querySelector('#app');
 const dialog = document.querySelector('#editor');
 const toastElement = document.querySelector('#toast');
+let googleBusy = false, googlePending = false;
 let oneDriveBusy = false, syncBusy = false, fileBusy = false, sppDirty = false;
 let fileQueue = [], fileStatus = '';
 let integrationBusy = false, costJobId = '', costRevision = 0, costLines = [];
@@ -198,6 +201,7 @@ function render() {
     if (!ready)
         return;
     scheduleStocks();
+    scheduleGoogle();
     // Background saves and connectivity changes must not recreate an embedded
     // editor: cross-origin focus cannot be inspected and its draft lives there.
     const embedded = document.querySelector('.module-frame[data-agenda]');
@@ -236,6 +240,7 @@ async function commit(next, expected = data.revision) {
     try {
         const clean = await (0, store_js_2.save)(state.workspace, next, expected);
         data = clean;
+        googlePending = true;
         render();
         if (state.workspace === 'real')
             setTimeout(() => void syncTick(), 700);
@@ -303,6 +308,11 @@ async function saveEditor(form) {
             }
         }
         const row = { ...(old || common), updatedAt: now, number: old?.number || (0, domain_js_1.nextNumber)(data, (0, calendar_js_1.today)().slice(0, 4)), customerId, deviceId: s('customerId') === '__new__' ? '' : s('deviceId'), title: s('title'), kind: s('kind'), status: s('status'), start, duration: Number(s('duration')), address: s('address') || (s('customerId') === '__new__' ? s('newCustomerAddress') : ''), issue: s('issue'), resolution: s('resolution'), result: s('result'), payment: s('payment'), amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
+        row.customerNotifications = f.get('customerNotifications') === 'on';
+        if (row.customerNotifications && !next.customers.find(c => c.id === row.customerId)?.email)
+            throw Error('Pre pozvánku a pripomienku doplňte e-mail zákazníka.');
+        if (editor.googleEventId)
+            row.googleEvent = { calendarId: (0, google_sync_js_1.googleSyncState)().calendarId, eventId: editor.googleEventId };
         const overlap = (0, calendar_js_1.conflicts)(row, data.jobs);
         if (overlap.length && !confirm('Termín sa prekrýva so zákazkou ' + overlap.map(j => j.number).join(', ') + '. Uložiť aj napriek prekryvu?'))
             return;
@@ -575,35 +585,30 @@ async function act(action, el) {
         showCost();
         return;
     }
-    if (['google-connect', 'google-config-save', 'google-disconnect', 'google-sync-job'].includes(action)) {
-        if (state.workspace === 'demo')
-            throw new Error('Google nie je dostupný v ukážkovom priestore.');
-        if (action === 'google-config-save') {
-            await (0, google_calendar_js_1.saveGoogleClientId)(document.querySelector('#google-client-id')?.value || '');
-            render();
-            message('Nastavenie uložené. Kliknite Pripojiť Google účet.');
-            return;
-        }
-        if (action === 'google-connect') {
-            await (0, google_calendar_js_1.connectGoogle)();
-            render();
-            message('Google pripojený. Vyberte cieľový kalendár.');
-            return;
-        }
-        if (action === 'google-disconnect') {
-            (0, google_calendar_js_1.disconnectGoogle)();
-            render();
-            message('Relácia odpojená. Udalosti v Google zostali zachované.');
-            return;
-        }
+    if (action.startsWith('google-server-')) {
+        await googleServerAction(action, id);
+        return;
+    }
+    if (action === 'google-open-job') {
         if (dirty)
-            throw new Error('Najskôr uložte zmeny zákazky.');
-        const job = data.jobs.find(j => j.id === id);
-        if (!job)
-            throw new Error('Zákazka sa nenašla.');
-        const done = await (0, google_calendar_js_1.syncGoogleJob)(job, data.customers.find(c => c.id === job.customerId));
-        if (done)
-            message('Zákazka bola prenesená do Google Kalendára.');
+            throw Error('Najskôr uložte zmeny zákazky.');
+        window.open((0, google_sync_js_1.googleUrl)((0, google_sync_js_1.googleLink)(id)?.event_snapshot), '_blank', 'noopener,noreferrer');
+        return;
+    }
+    if (action === 'google-view-event') {
+        showGoogleEvent(id);
+        return;
+    }
+    if (action === 'google-event-close') {
+        document.querySelector('#google-event-dialog')?.close();
+        return;
+    }
+    if (action === 'google-event-new') {
+        const ev = (0, google_sync_js_1.googleSyncState)().events.find(e => e.id === id), range = ev && (0, google_sync_js_1.eventRange)(ev);
+        if (!ev || !range || ev.start?.date || range.duration > 1440)
+            throw Error('Pre zákazku zvoľte časový termín do 24 hodín.');
+        document.querySelector('#google-event-dialog')?.close();
+        openEditor('job', '', { googleEventId: id, googleStart: range.start, googleDuration: range.duration, googleTitle: ev.summary, googleAddress: ev.location });
         return;
     }
     if (action === 'manual-delete' && state.workspace === 'real')
@@ -872,14 +877,9 @@ document.addEventListener('change', event => {
         render();
         return;
     }
-    if (el.id === 'google-calendar-select') {
-        try {
-            (0, google_calendar_js_1.selectGoogleCalendar)(el.value);
-            message('Cieľový kalendár vybraný.');
-        }
-        catch (error) {
-            fail(error);
-        }
+    if (el.id === 'google-server-calendar' && el.value) {
+        void (async () => { if (!cloud_js_1.cloudState.enabled)
+            throw Error('Najskôr zapnite synchronizáciu pracovného priestoru.'); await (0, google_sync_js_1.googleAction)('select', { calendarId: el.value }); render(); await googleTick(true); message('Hlavný Google kalendár je pripojený.'); })().catch(fail);
     }
     if (el.id === 'manual-filter')
         (0, manuals_js_1.manualFilter)(el.value);
@@ -1048,8 +1048,6 @@ async function init() {
     if ((0, onedrive_js_2.oneDriveClientId)())
         void (0, onedrive_js_1.resumeOneDrive)().then(() => { if (ready && !document.querySelector('input:focus,select:focus,textarea:focus'))
             render(); }).catch(() => { });
-    if ((0, google_calendar_js_1.googleClientId)())
-        void (0, google_calendar_js_1.prepareGoogle)().catch(() => { });
     try {
         data = await (0, store_js_2.load)('real');
         ready = true;
@@ -1057,11 +1055,22 @@ async function init() {
         if (routes.some(r => r[0] === route) || route === 'settings')
             state.route = route;
         render();
-        void (0, cloud_js_1.initCloud)().then(() => { if (!document.querySelector('input:focus,select:focus,textarea:focus'))
-            render(); void syncTick(); }).catch(() => { });
+        void (0, cloud_js_1.initCloud)().then(async () => { try {
+            const connected = await (0, google_sync_js_1.finishGoogleConnect)();
+            await (0, google_sync_js_1.loadGoogleState)();
+            if (connected) {
+                message('Google účet pripojený. Vyberte hlavný kalendár.');
+                await (0, google_sync_js_1.googleAction)('calendars');
+            }
+        }
+        catch (e) {
+            fail(e);
+        } if (!document.querySelector('input:focus,select:focus,textarea:focus'))
+            render(); void syncTick(); void googleTick(true); }).catch(() => { });
         void (0, file_queue_js_1.queuedFiles)().then(q => { fileQueue = q; });
         setInterval(() => void syncTick(), 15000);
         setInterval(() => void fileTick(), 15000);
+        setInterval(() => void googleTick(true), 60000);
         await setupPwa();
     }
     catch (err) {
@@ -1108,7 +1117,7 @@ document.addEventListener('submit', event => {
 });
 function showSyncStatus() { document.querySelectorAll('#sync-status,.save-state,.storage-banner > span').forEach(el => el.textContent = cloud_js_1.cloudState.status); }
 async function syncTick(choice) {
-    if (!ready || state.workspace !== 'real' || busy || syncBusy || oneDriveBusy || fileBusy || dialog.open || dirty || !cloud_js_1.cloudState.enabled)
+    if (!ready || state.workspace !== 'real' || busy || syncBusy || googleBusy || oneDriveBusy || fileBusy || dialog.open || dirty || !cloud_js_1.cloudState.enabled)
         return;
     // Avoid replacing partially entered settings / upload fields during polling.
     const run = async () => { syncBusy = true; try {
@@ -1135,6 +1144,10 @@ async function syncTick(choice) {
     else
         await run();
     void fileTick();
+    if (googlePending && !cloud_js_1.cloudState.conflicts.length) {
+        googlePending = false;
+        void googleTick(true, true);
+    }
 }
 async function cloudAction(action, id) {
     if (state.workspace !== 'real' || busy || dirty || dialog.open || oneDriveBusy || fileBusy)
@@ -1149,6 +1162,7 @@ async function cloudAction(action, id) {
     }
     if (action === 'sync-logout') {
         await (0, cloud_js_1.logoutCloud)();
+        (0, google_sync_js_1.resetGoogleSync)();
         render();
         return;
     }
@@ -1289,7 +1303,7 @@ document.addEventListener('submit', event => {
         }
         const fields = new FormData(form), email = String(fields.get('email') || ''), password = String(fields.get('password') || '');
         form.reset();
-        void (0, cloud_js_1.loginCloud)(email, password).then(() => { render(); void syncTick(); }).catch(fail);
+        void (0, cloud_js_1.loginCloud)(email, password).then(async () => { render(); void syncTick(); await (0, google_sync_js_1.loadGoogleState)(); render(); void googleTick(true); }).catch(fail);
     }
     if (form.id === 'attachment-form') {
         event.preventDefault();
@@ -1379,6 +1393,132 @@ function renderStockContent() {
 setInterval(() => { if (document.visibilityState === 'visible' && !stockView.loading && !document.querySelector('#page-search:focus, [data-stock-category]:focus'))
     void refreshStocks(); }, 60000);
 window.addEventListener('online', () => void refreshStocks());
+let googleTimer;
+function scheduleGoogle() {
+    if (!ready || state.workspace !== 'real' || !['calendar', 'home'].includes(state.route) || !(0, google_sync_js_1.googleSyncState)().enabled)
+        return;
+    clearTimeout(googleTimer);
+    googleTimer = setTimeout(() => void googleTick(), 200);
+}
+async function googleTick(force = false, push = false) {
+    if (!ready || state.workspace !== 'real' || !(0, cloud_js_1.cloudUser)() || googleBusy || busy || syncBusy || dialog.open || dirty || !navigator.onLine)
+        return;
+    const g = (0, google_sync_js_1.googleSyncState)();
+    if (!g.connected || !g.calendarId)
+        return;
+    googleBusy = true;
+    try {
+        if (push && cloud_js_1.cloudState.enabled)
+            await (0, google_sync_js_1.googleAction)('sync');
+        const date = state.calendarMode === 'month' && state.route !== 'home' ? state.month + '-01' : state.date;
+        const from = (0, calendar_js_1.addDays)(date, -8) + 'T00:00:00Z', to = (0, calendar_js_1.addDays)(date, 45) + 'T00:00:00Z';
+        const old = JSON.stringify(g);
+        await (0, google_sync_js_1.loadGoogleEvents)(from, to, force);
+        if (old !== JSON.stringify((0, google_sync_js_1.googleSyncState)()) && !document.querySelector('input:focus,select:focus,textarea:focus'))
+            render();
+    }
+    catch (error) {
+        (0, google_sync_js_1.googleSyncState)().error = error instanceof Error ? error.message : 'Google synchronizácia sa zopakuje.';
+        if (!document.querySelector('input:focus,select:focus,textarea:focus'))
+            render();
+    }
+    finally {
+        googleBusy = false;
+    }
+}
+async function googleServerAction(action, id) {
+    if (state.workspace !== 'real')
+        throw Error('Google je dostupný iba vo vlastnom pracovnom priestore.');
+    if (googleBusy || busy)
+        throw Error('Počkajte na dokončenie Google prenosu.');
+    if (dirty)
+        throw Error('Najskôr uložte rozpracované zmeny.');
+    if (action === 'google-server-refresh') {
+        await (0, google_sync_js_1.loadGoogleState)();
+        await googleTick(true, true);
+        render();
+        return;
+    }
+    googleBusy = true;
+    try {
+        if (action === 'google-server-config') {
+            const input = document.querySelector('#google-server-client-secret');
+            const clientSecret = input?.value || '';
+            if (input)
+                input.value = '';
+            await (0, google_sync_js_1.googleAction)('configure', { clientId: document.querySelector('#google-server-client-id')?.value.trim() || '', clientSecret, mailEnabled: document.querySelector('#google-server-mail')?.checked || false });
+            message('Poverenia sú uložené na serveri. Teraz pripojte Google účet.');
+        }
+        else if (action === 'google-server-connect') {
+            await (0, google_sync_js_1.beginGoogleConnect)();
+        }
+        else if (action === 'google-server-calendars') {
+            await (0, google_sync_js_1.googleAction)('calendars');
+        }
+        else if (action === 'google-server-disconnect') {
+            if (!confirm('Odpojiť Google a zastaviť automatické prenosy a správy? Udalosti aj zákazky zostanú zachované.'))
+                return;
+            await (0, google_sync_js_1.googleAction)('disconnect');
+            message('Google bol odpojený.');
+        }
+        else if (action === 'google-server-job') {
+            if (!cloud_js_1.cloudState.enabled)
+                throw Error('Najskôr zapnite synchronizáciu pracovného priestoru.');
+            const saved = await (0, cloud_js_1.synchronize)();
+            if (saved)
+                data = saved;
+            if (cloud_js_1.cloudState.conflicts.length)
+                throw Error('Najskôr vyriešte konflikt synchronizácie v Nastaveniach.');
+            await (0, google_sync_js_1.googleAction)('sync', { jobId: id });
+            const refreshed = await (0, cloud_js_1.synchronize)();
+            if (refreshed)
+                data = refreshed;
+            if (editor?.type === 'job' && editor.id === id && !dirty)
+                openEditor('job', id);
+            const link = (0, google_sync_js_1.googleLink)(id);
+            if (link?.last_error)
+                throw Error(link.last_error);
+            if ((0, google_sync_js_1.googleSyncState)().error)
+                throw Error((0, google_sync_js_1.googleSyncState)().error);
+            message('Google udalosť je prepojená.');
+        }
+        else if (action === 'google-server-link') {
+            const jobId = document.querySelector('#google-link-job')?.value;
+            if (!jobId)
+                throw Error('Vyberte zákazku.');
+            const saved = await (0, cloud_js_1.synchronize)();
+            if (saved)
+                data = saved;
+            if (cloud_js_1.cloudState.conflicts.length)
+                throw Error('Najskôr vyriešte konflikt synchronizácie v Nastaveniach.');
+            await (0, google_sync_js_1.googleAction)('link', { jobId, eventId: id });
+            const refreshed = await (0, cloud_js_1.synchronize)();
+            if (refreshed)
+                data = refreshed;
+            document.querySelector('#google-event-dialog')?.close();
+            message('Udalosť je pripojená k zákazke.');
+        }
+    }
+    finally {
+        googleBusy = false;
+        render();
+    }
+}
+function showGoogleEvent(id) {
+    const g = (0, google_sync_js_1.googleSyncState)(), ev = g.events.find(x => x.id === id);
+    if (!ev)
+        return;
+    let popup = document.querySelector('#google-event-dialog');
+    if (!popup) {
+        popup = document.createElement('dialog');
+        popup.id = 'google-event-dialog';
+        popup.className = 'google-event-detail';
+        document.body.append(popup);
+    }
+    const range = (0, google_sync_js_1.eventRange)(ev), when = ev.start?.date ? (0, calendar_js_1.dateLabel)(ev.start.date) : range ? (0, calendar_js_1.dateLabel)(range.start, { dateStyle: 'full', timeStyle: 'short' }) : 'Bez termínu';
+    popup.innerHTML = `<div class="panel-head"><h2>${(0, ui_js_1.e)(ev.summary)}</h2>${(0, ui_js_1.button)('Zavrieť', 'google-event-close', 'close', 'icon-btn')}</div><p>${(0, ui_js_1.e)(when)}</p><p>${(0, ui_js_1.e)(ev.location || '')}</p><div class="toolbar"><a class="btn secondary" href="${(0, ui_js_1.e)((0, google_sync_js_1.googleUrl)(ev))}" target="_blank" rel="noopener noreferrer">Otvoriť v Google</a>${(0, ui_js_1.button)('Vytvoriť zákazku', 'google-event-new', 'plus', 'btn primary', `data-id="${(0, ui_js_1.e)(id)}"`)}</div><hr><label class="field"><span>Pripojiť k existujúcej zákazke</span><select id="google-link-job"><option value="">Vyberte zákazku</option>${data.jobs.filter(j => !g.links.some(l => l.job_id === j.id) && j.status !== 'cancelled').map(j => `<option value="${(0, ui_js_1.e)(j.id)}">${(0, ui_js_1.e)(j.number + ' · ' + j.title)}</option>`).join('')}</select></label>${(0, ui_js_1.button)('Pripojiť udalosť', 'google-server-link', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(id)}"`)}<p class="tiny muted">Zákazka prevezme dátum a čas z Google. Jej dokumenty a kalkulácia zostanú zachované.</p>`;
+    popup.showModal();
+}
 
 },
 "demo.js":function(require,module,exports){
@@ -1480,7 +1620,7 @@ function validateData(input) {
         lastBackup: str(root.lastBackup, 'čas zálohy', 40), ...(root.stocks === undefined ? {} : { stocks: (0, commerce_js_1.validateStocks)(root.stocks) }), ...(root.catalogImportedAt === undefined ? {} : { catalogImportedAt: str(root.catalogImportedAt, 'čas importu', 40) }),
         customers: arr(root.customers, 'zákazníci', o => ({ ...base(o), name: str(o.name, 'meno', 160), company: str(o.company, 'firma', 200), ico: str(o.ico ?? '', 'IČO', 20), dic: str(o.dic ?? '', 'DIČ', 30), icDph: str(o.icDph ?? '', 'IČ DPH', 30), phone: str(o.phone, 'telefón', 60), email: str(o.email, 'e-mail', 200), address: str(o.address, 'adresa', 400), notes: str(o.notes, 'poznámka'), archived: bool(o.archived, 'archív zákazníka') })),
         devices: arr(root.devices, 'zariadenia', o => ({ ...base(o), customerId: str(o.customerId, 'zákazník', 80), type: choice(o.type, Object.keys(exports.DEVICE_TYPES), 'typ zariadenia'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), serial: str(o.serial, 'výrobné číslo', 160), location: str(o.location, 'umiestnenie', 400), nextService: date(o.nextService, 'ďalší servis'), notes: str(o.notes, 'poznámka'), archived: bool(o.archived, 'archív zariadenia') })),
-        jobs: arr(root.jobs, 'zákazky', o => ({ ...base(o), ...(o.costing === undefined ? {} : { costing: (0, commerce_js_1.validateLines)(o.costing) }), number: str(o.number, 'číslo zákazky', 40), customerId: str(o.customerId, 'zákazník', 80), deviceId: str(o.deviceId, 'zariadenie', 80), title: str(o.title, 'názov', 200), kind: choice(o.kind, Object.keys(exports.KINDS), 'druh práce'), status: choice(o.status, Object.keys(exports.STATUSES), 'stav zákazky'), start: str(o.start, 'začiatok', 40), duration: num(o.duration, 'dĺžka', 5, 1440), address: str(o.address, 'adresa', 400), issue: str(o.issue, 'problém'), resolution: str(o.resolution, 'riešenie'), result: choice(o.result, ['pending', 'ok', 'fail'], 'technický výsledok'), payment: choice(o.payment, ['unpaid', 'paid'], 'úhrada'), amount: o.amount === null ? null : num(o.amount, 'suma', 0, 1000000), version: num(o.version, 'verzia udalosti', 0, Number.MAX_SAFE_INTEGER) })),
+        jobs: arr(root.jobs, 'zákazky', o => ({ ...base(o), ...(o.googleEvent === undefined ? {} : { googleEvent: { calendarId: str(obj(o.googleEvent, 'Google väzba').calendarId, 'Google kalendár', 1024), eventId: str(obj(o.googleEvent, 'Google väzba').eventId, 'Google udalosť', 1024) } }), ...(o.customerNotifications === undefined ? {} : { customerNotifications: bool(o.customerNotifications, 'upozornenia zákazníkovi') }), ...(o.costing === undefined ? {} : { costing: (0, commerce_js_1.validateLines)(o.costing) }), number: str(o.number, 'číslo zákazky', 40), customerId: str(o.customerId, 'zákazník', 80), deviceId: str(o.deviceId, 'zariadenie', 80), title: str(o.title, 'názov', 200), kind: choice(o.kind, Object.keys(exports.KINDS), 'druh práce'), status: choice(o.status, Object.keys(exports.STATUSES), 'stav zákazky'), start: str(o.start, 'začiatok', 40), duration: num(o.duration, 'dĺžka', 5, 1440), address: str(o.address, 'adresa', 400), issue: str(o.issue, 'problém'), resolution: str(o.resolution, 'riešenie'), result: choice(o.result, ['pending', 'ok', 'fail'], 'technický výsledok'), payment: choice(o.payment, ['unpaid', 'paid'], 'úhrada'), amount: o.amount === null ? null : num(o.amount, 'suma', 0, 1000000), version: num(o.version, 'verzia udalosti', 0, Number.MAX_SAFE_INTEGER) })),
         tips: arr(root.tips, 'poradňa', o => ({ ...base(o), title: str(o.title, 'názov', 200), category: choice(o.category, ['fault', 'tip', 'regulation'], 'kategória rady'), manufacturer: str(o.manufacturer, 'výrobca', 120), model: str(o.model, 'model', 160), code: str(o.code, 'kód', 80), symptoms: str(o.symptoms, 'prejav'), solution: str(o.solution, 'riešenie'), source: str(o.source, 'zdroj', 2000), verification: choice(o.verification, ['draft', 'field', 'manufacturer'], 'overenie'), verifiedAt: date(o.verifiedAt, 'dátum overenia'), jobId: str(o.jobId, 'odkaz na zákazku', 80) }))
     };
     if (!Number.isInteger(data.revision))
@@ -1756,6 +1896,7 @@ exports.enableCloud = enableCloud;
 exports.synchronize = synchronize;
 exports.readPohodaStocks = readPohodaStocks;
 exports.readPohodaCategories = readPohodaCategories;
+exports.googleServerRequest = googleServerRequest;
 const shared_contact_js_1 = require("./shared-contact.js");
 const pohoda_stock_js_1 = require("./pohoda-stock.js");
 const domain_js_1 = require("../domain.js");
@@ -1972,6 +2113,18 @@ async function readPohodaCategories() {
     if (!user)
         throw Error('Prihláste sa účtom Cenových ponúk.');
     return (0, pohoda_stock_js_1.queryStockCategories)(c);
+}
+/** Authenticated Google worker call. OAuth secrets never enter the app backup. */
+async function googleServerRequest(body) {
+    const c = await sdk();
+    const { data } = await c.auth.getSession();
+    if (!data.session?.access_token)
+        throw Error('Najskôr sa prihláste do Spektry v Nastaveniach.');
+    const response = await fetch('https://rrakzoicawqbcpnzavet.supabase.co/functions/v1/google-calendar', { method: 'POST', headers: { Authorization: 'Bearer ' + data.session.access_token, apikey: 'sb_publishable_ZZOAMeOcSHS6IGghKIu1lA_xss5sJzK', 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(body.action === 'sync' ? 120000 : 45000) });
+    const result = await response.json().catch(() => ({ error: 'Google prepojenie nie je dostupné.' }));
+    if (!response.ok)
+        throw Error(result.error || 'Google prepojenie nie je dostupné.');
+    return result;
 }
 
 },
@@ -2326,6 +2479,145 @@ async function syncGoogleJob(job, customer, approve = confirm) {
     finally {
         syncing = false;
     }
+}
+
+},
+"lib/google-sync.js":function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.externalId = void 0;
+exports.googleSyncState = googleSyncState;
+exports.resetGoogleSync = resetGoogleSync;
+exports.googleAction = googleAction;
+exports.loadGoogleState = loadGoogleState;
+exports.beginGoogleConnect = beginGoogleConnect;
+exports.finishGoogleConnect = finishGoogleConnect;
+exports.loadGoogleEvents = loadGoogleEvents;
+exports.googleLink = googleLink;
+exports.googleUrl = googleUrl;
+exports.eventRange = eventRange;
+exports.googleCalendarData = googleCalendarData;
+exports.customerReply = customerReply;
+const cloud_js_1 = require("./cloud.js");
+const calendar_js_1 = require("./calendar.js");
+const initial = () => ({ configured: false, connected: false, enabled: false, mailEnabled: false, clientId: '', calendarId: '', calendarName: '', account: '', lastSyncedAt: '', error: '', calendars: [], events: [], links: [], messages: [], loading: false, loadedRange: '' });
+let state = initial(), owner = '', attemptRange = '', attemptAt = 0;
+function googleSyncState() { if (owner !== (0, cloud_js_1.cloudUser)()) {
+    owner = (0, cloud_js_1.cloudUser)();
+    state = initial();
+    attemptRange = '';
+    attemptAt = 0;
+} return state; }
+function resetGoogleSync() { owner = ''; state = initial(); attemptRange = ''; attemptAt = 0; }
+async function googleAction(action, args = {}) {
+    googleSyncState();
+    const user = (0, cloud_js_1.cloudUser)();
+    if (!user)
+        throw Error('Najskôr sa prihláste do Spektry.');
+    const result = await (0, cloud_js_1.googleServerRequest)({ action, ...args });
+    if (user !== (0, cloud_js_1.cloudUser)())
+        throw Error('Účet sa počas prenosu zmenil.');
+    state = { ...state, ...result };
+    return result;
+}
+async function loadGoogleState() { if ((0, cloud_js_1.cloudUser)())
+    await googleAction('status'); }
+async function beginGoogleConnect() {
+    if (location.origin !== 'https://spektra-servis.vercel.app')
+        throw Error('Google pripojenie nastavte na spektra-servis.vercel.app.');
+    const result = await googleAction('connect');
+    sessionStorage.setItem('spektra-google-state', result.state);
+    location.assign(result.url);
+}
+async function finishGoogleConnect() {
+    const raw = sessionStorage.getItem('spektra-google-return');
+    if (!raw)
+        return false;
+    sessionStorage.removeItem('spektra-google-return');
+    const result = JSON.parse(raw), expected = sessionStorage.getItem('spektra-google-state');
+    sessionStorage.removeItem('spektra-google-state');
+    if (result.error)
+        throw Error('Google prístup nebol povolený.');
+    if (!expected || result.state !== expected)
+        throw Error('Google odpoveď nepatrí tomuto pripojeniu. Skúste znova.');
+    await googleAction('callback', { code: result.code, state: result.state });
+    return true;
+}
+async function loadGoogleEvents(from, to, force = false) {
+    const current = googleSyncState(), range = from + '|' + to;
+    if (!current.connected || !current.calendarId || current.loading)
+        return;
+    if (!force && (current.loadedRange === range || (attemptRange === range && Date.now() - attemptAt < 60000)))
+        return;
+    attemptRange = range;
+    attemptAt = Date.now();
+    current.loading = true;
+    try {
+        await googleAction('events', { from, to });
+        state.loadedRange = range;
+    }
+    catch (e) {
+        state.error = e instanceof Error ? e.message : 'Google udalosti sa nenačítali.';
+        throw e;
+    }
+    finally {
+        state.loading = false;
+    }
+}
+function googleLink(jobId) { return googleSyncState().links.find(x => x.job_id === jobId); }
+function googleUrl(event) {
+    if (event?.htmlLink) {
+        try {
+            const u = new URL(event.htmlLink);
+            if (u.protocol === 'https:' && ['calendar.google.com', 'www.google.com'].includes(u.hostname))
+                return u.href;
+        }
+        catch { }
+    }
+    const id = googleSyncState().calendarId;
+    return 'https://calendar.google.com/calendar/u/0/r' + (id ? '?cid=' + encodeURIComponent(id) : '');
+}
+function eventRange(event) {
+    try {
+        const start = event.start?.dateTime ? new Date(event.start.dateTime).toISOString() : event.start?.date ? (0, calendar_js_1.toUtc)(event.start.date + 'T00:00') : '';
+        const end = event.end?.dateTime ? new Date(event.end.dateTime).toISOString() : event.end?.date ? (0, calendar_js_1.toUtc)(event.end.date + 'T00:00') : '';
+        if (!start || !end)
+            return null;
+        const duration = (Date.parse(end) - Date.parse(start)) / 60000;
+        return duration > 0 ? { start, duration } : null;
+    }
+    catch {
+        return null;
+    }
+}
+const externalId = (eventId) => 'google_' + eventId;
+exports.externalId = externalId;
+/** View-only projection: external calendar events never become customer/job records by accident. */
+function googleCalendarData(data) {
+    const current = googleSyncState();
+    if (!current.connected || !current.calendarId)
+        return data;
+    const eventById = new Map(current.events.map(e => [e.id, e]));
+    const jobs = data.jobs.map(j => {
+        const link = current.links.find(x => x.job_id === j.id && x.calendar_id === current.calendarId);
+        if (!link)
+            return j;
+        const event = eventById.get(link.event_id) || link.event_snapshot, range = eventRange(event);
+        return { ...j, ...(range || {}), ...(event.status === 'cancelled' ? { status: 'cancelled' } : {}) };
+    });
+    for (const event of current.events) {
+        if (event.status === 'cancelled' || current.links.some(x => x.calendar_id === current.calendarId && x.event_id === event.id && data.jobs.some(j => j.id === x.job_id)))
+            continue;
+        const range = eventRange(event);
+        if (!range)
+            continue;
+        jobs.push({ id: (0, exports.externalId)(event.id), number: 'Google', title: event.summary, customerId: '', deviceId: '', kind: 'servis', status: 'planned', ...range, address: event.location || '', issue: '', resolution: '', result: 'pending', payment: 'unpaid', amount: null, version: 0, createdAt: range.start, updatedAt: range.start });
+    }
+    return { ...data, jobs };
+}
+function customerReply(jobId, email) {
+    const attendee = googleLink(jobId)?.event_snapshot.attendees?.find(a => a.email.toLowerCase() === email.toLowerCase());
+    return { accepted: 'Potvrdené', declined: 'Odmietnuté', tentative: 'Predbežne potvrdené', needsAction: 'Čaká na odpoveď' }[attendee?.responseStatus || ''] || 'Pozvánka ešte nebola odoslaná';
 }
 
 },
@@ -2823,25 +3115,29 @@ function sppRevisionPage() {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.calendarPage = calendarPage;
 exports.daySlots = daySlots;
+const google_sync_js_1 = require("../lib/google-sync.js");
 const domain_js_1 = require("../domain.js");
 const calendar_js_1 = require("../lib/calendar.js");
 const ui_js_1 = require("../ui.js");
 function calendarPage(data, state) {
+    const google = (0, google_sync_js_1.googleSyncState)();
+    if (state.workspace === 'real')
+        data = (0, google_sync_js_1.googleCalendarData)(data);
     const timed = state.calendarMode !== 'month';
     const first = timed ? state.date : state.month + '-01';
     const weekday = (new Date(first + 'T12:00:00Z').getUTCDay() + 6) % 7;
     const start = state.calendarMode === 'day' ? first : (0, calendar_js_1.addDays)(first, -weekday), days = Array.from({ length: state.calendarMode === 'day' ? 1 : timed ? 7 : 42 }, (_, i) => (0, calendar_js_1.addDays)(start, i));
     const scheduled = data.jobs.filter(j => j.start && j.status !== 'cancelled');
     const daily = scheduled.filter(j => (0, calendar_js_1.localDate)(j.start).startsWith(state.date)).sort((a, b) => a.start.localeCompare(b.start));
-    return (0, ui_js_1.heading)('PLÁNOVANIE', 'Kalendár', 'Jeden technik. Prehľadné termíny. Časové pásmo Bratislava.', (0, ui_js_1.button)('Prepojenie Google', 'route-settings', 'calendar', 'btn secondary') + (0, ui_js_1.button)('Naplánovať výjazd', 'new-job-day', 'plus', 'btn primary')) +
-        `<div class="calendar-layout google-calendar"><section class="panel calendar-primary"><div class="calendar-toolbar">
+    return (0, ui_js_1.heading)('PLÁNOVANIE', 'Kalendár', google.enabled ? 'Váš Google Kalendár a prepojené servisné zákazky.' : 'Prehľadné termíny. Časové pásmo Bratislava.', (0, ui_js_1.button)('Prepojenie Google', 'route-settings', 'calendar', 'btn secondary') + (0, ui_js_1.button)('Naplánovať výjazd', 'new-job-day', 'plus', 'btn primary')) +
+        `<div class="google-status"><p>${state.workspace === 'demo' ? 'Ukážkový kalendár' : google.error ? (0, ui_js_1.e)(google.error) : google.enabled ? 'Google · ' + (0, ui_js_1.e)(google.calendarName) + ' · automatické prepojenie' : 'Pripojte existujúci Google Kalendár v Nastaveniach.'}</p>${(0, ui_js_1.button)('Obnoviť', 'google-server-refresh', 'refresh', 'btn ghost')}<a class="btn secondary" href="${(0, ui_js_1.e)((0, google_sync_js_1.googleUrl)())}" target="_blank" rel="noopener noreferrer">Otvoriť Google</a></div><div class="calendar-layout google-calendar"><section class="panel calendar-primary"><div class="calendar-toolbar">
     <details class="calendar-menu"><summary aria-label="Ponuka kalendára"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></summary><div class="calendar-menu-panel"><strong>Zobrazenie kalendára</strong><div role="group" aria-label="Zobrazenie kalendára">${[['day', 'Deň'], ['week', 'Týždeň'], ['month', 'Mesiac']].map(([mode, label]) => `<button type="button" data-action="calendar-mode" data-mode="${mode}" aria-pressed="${state.calendarMode === mode}" class="${state.calendarMode === mode ? 'active' : ''}">${label}</button>`).join('')}</div><hr>${(0, ui_js_1.button)('Prepojenie Google', 'route-settings', 'calendar', 'btn ghost')}${(0, ui_js_1.button)('Nastavenia a zálohy', 'route-settings', 'settings', 'btn ghost')}${(0, ui_js_1.button)('Export kalendára .ics', 'export-calendar', 'download', 'btn ghost')}</div></details>
     <h2 class="calendar-title">${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(timed ? state.date : state.month + '-01', { month: 'long', year: 'numeric' }))}</h2>
     ${(0, ui_js_1.button)('Predchádzajúci', 'calendar-prev', 'left', 'icon-btn')}${(0, ui_js_1.button)('Nasledujúci', 'calendar-next', 'right', 'icon-btn')}${(0, ui_js_1.button)('Dnes', 'calendar-today', '', 'btn ghost')}${(0, ui_js_1.button)('Naplánovať výjazd', 'new-job-day', 'plus', 'icon-btn calendar-add')}
   </div>
   ${timed ? weekGrid(data, days, state.date) : `<div class="calendar-grid"><div class="daynames">${['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'].map(d => `<span>${d}</span>`).join('')}</div><div class="days ${state.calendarMode === 'week' ? 'week' : ''}">${days.map(day => { const count = scheduled.filter(j => (0, calendar_js_1.localDate)(j.start).startsWith(day)).length; return `<button data-action="new-job-slot" data-date="${day}" data-time="09:00" aria-label="${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day))}, ${count} udalostí" aria-pressed="${day === state.date}" class="day ${day === state.date ? 'selected' : ''} ${day === (0, calendar_js_1.today)() ? 'today' : ''} ${day.slice(0, 7) !== state.month && state.calendarMode === 'month' ? 'other-month' : ''}"><span>${Number(day.slice(8))}</span>${count ? `<span class="day-dots" aria-hidden="true">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span><small>${count} ${count === 1 ? 'výjazd' : 'výjazdy'}</small>` : ''}</button>`; }).join('')}</div></div>`}<div class="calendar-footer"><span><i class="legend-dot"></i> Výjazd v aplikácii Spektra</span>${(0, ui_js_1.button)('Export kalendára .ics', 'export-calendar', 'download', 'btn ghost')}</div></section>
-  <section class="panel agenda"><div class="panel-head"><div><span class="eyebrow">AGENDA DŇA</span><h2>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(state.date, { weekday: 'long', day: 'numeric', month: 'numeric' }))}</h2></div></div>${daily.length ? daily.map(j => (0, ui_js_1.jobCard)(j, data, true)).join('') : (0, ui_js_1.empty)('Žiadny výjazd', 'Vyberte deň alebo naplánujte novú zákazku.', (0, ui_js_1.button)('Pridať termín', 'new-job-day', 'plus'), 'calendar')}</section></div>
-  <div class="inline-note calendar-help">Google Kalendár: termín otvoríte tlačidlom v detaile zákazky a uložíte ho ručne. Automatická synchronizácia ani odosielanie upozornení zatiaľ nie sú zapnuté. Import .ics nemusí v každom kalendári preniesť pripomienku; skontrolujte ju po importe.</div>`;
+  <section class="panel agenda"><div class="panel-head"><div><span class="eyebrow">AGENDA DŇA</span><h2>${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(state.date, { weekday: 'long', day: 'numeric', month: 'numeric' }))}</h2></div></div>${daily.length ? daily.map(j => j.id.startsWith('google_') ? `<button class="job-card event-google" data-action="google-view-event" data-id="${(0, ui_js_1.e)(j.id.slice(7))}"><strong>${(0, ui_js_1.e)(j.title)}</strong><span>${(0, ui_js_1.e)((0, calendar_js_1.timeLabel)(j.start))} · ${(0, ui_js_1.e)(j.address)} · Google</span></button>` : (0, ui_js_1.jobCard)(j, data, true)).join('') : (0, ui_js_1.empty)('Žiadny výjazd', 'Vyberte deň alebo naplánujte novú zákazku.', (0, ui_js_1.button)('Pridať termín', 'new-job-day', 'plus'), 'calendar')}</section></div>
+  <div class="inline-note calendar-help">${google.enabled ? 'Kliknutím na Google udalosť ju môžete pripojiť k zákazke. Presunutie termínu v Google sa prenesie späť. Dokumenty a kalkulácie zostávajú v Spektre.' : 'Google pripojenie nájdete v Nastaveniach. Export .ics je jednorazová kópia.'}</div>`;
 }
 const minute = (local) => Number(local.slice(11, 13)) * 60 + Number(local.slice(14, 16));
 function daySlots(jobs, day) {
@@ -2890,9 +3186,10 @@ function weekGrid(data, days, selected) {
     <div class="time-body" style="height:${height}px"><div class="time-axis">${hours.map(h => `<span style="top:${(h * 60 - from) * 1.2}px">${String(h).padStart(2, '0')}:00</span>`).join('')}</div>
     ${days.map((day, i) => `<div class="time-day ${day === (0, calendar_js_1.today)() ? 'is-today' : ''}">${Array.from({ length: (to - from) / 30 }, (_, n) => { const m = from + n * 30, time = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); return `<button type="button" class="time-slot" data-action="new-job-slot" data-date="${day}" data-time="${time}" aria-label="Naplánovať výjazd ${(0, ui_js_1.e)((0, calendar_js_1.dateLabel)(day))} o ${time}" title="Naplánovať výjazd o ${time}" style="top:${n * 36}px"></button>`; }).join('')}${slots[i].map(s => {
         const c = data.customers.find(c => c.id === s.job.customerId);
-        const customer = c?.name || c?.company || 'Bez zákazníka';
+        const external = s.job.id.startsWith('google_');
+        const customer = external ? 'Google' : c?.name || c?.company || 'Bez zákazníka';
         const label = `${customer} · ${s.job.title} · ${(0, calendar_js_1.timeLabel)(s.job.start)}–${(0, calendar_js_1.timeLabel)((0, calendar_js_1.endTime)(s.job))} · ${s.job.duration} min`;
-        return `<button type="button" class="time-event event-${(0, ui_js_1.e)(s.job.kind)} ${s.end - s.start < 30 ? 'short-event' : ''}" data-action="edit-job" data-id="${(0, ui_js_1.e)(s.job.id)}" title="${(0, ui_js_1.e)(label)}" aria-label="${(0, ui_js_1.e)(label)}" style="top:${(s.start - from) * 1.2}px;height:${(s.end - s.start) * 1.2}px;left:calc(${s.lane * 100 / s.columns}% + 2px);width:calc(${100 / s.columns}% - 4px)"><strong>${(0, ui_js_1.e)(customer)}</strong><span>${(0, ui_js_1.e)((0, calendar_js_1.timeLabel)(s.job.start))}–${(0, ui_js_1.e)((0, calendar_js_1.timeLabel)((0, calendar_js_1.endTime)(s.job)))} · ${s.job.duration} min</span><span>${(0, ui_js_1.e)(s.job.title)}</span></button>`;
+        return `<button type="button" class="time-event event-${external ? 'google' : (0, ui_js_1.e)(s.job.kind)} ${s.end - s.start < 30 ? 'short-event' : ''}" data-action="${external ? 'google-view-event' : 'edit-job'}" data-id="${(0, ui_js_1.e)(external ? s.job.id.slice(7) : s.job.id)}" title="${(0, ui_js_1.e)(label)}" aria-label="${(0, ui_js_1.e)(label)}" style="top:${(s.start - from) * 1.2}px;height:${(s.end - s.start) * 1.2}px;left:calc(${s.lane * 100 / s.columns}% + 2px);width:calc(${100 / s.columns}% - 4px)"><strong>${(0, ui_js_1.e)(customer)}</strong><span>${(0, ui_js_1.e)((0, calendar_js_1.timeLabel)(s.job.start))}–${(0, ui_js_1.e)((0, calendar_js_1.timeLabel)((0, calendar_js_1.endTime)(s.job)))} · ${s.job.duration} min</span><span>${(0, ui_js_1.e)(s.job.title)}</span></button>`;
     }).join('')}</div>`).join('')}</div></div></div><div class="time-legend">${Object.entries(domain_js_1.KINDS).map(([kind, label]) => `<span><i class="event-${kind}"></i>${label}</span>`).join('')}<span>Výška bloku = trvanie výjazdu</span></div>`;
 }
 
@@ -2987,6 +3284,7 @@ function dashboard(data, state) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deviceOptions = deviceOptions;
 exports.editorContent = editorContent;
+const google_sync_js_1 = require("../lib/google-sync.js");
 const domain_js_1 = require("../domain.js");
 const commerce_js_1 = require("./commerce.js");
 const calendar_js_1 = require("../lib/calendar.js");
@@ -3019,12 +3317,12 @@ function editorContent(editor, data) {
         const j = data.jobs.find(x => x.id === editor.id), cId = j?.customerId || editor.customerId || '', deviceId = j?.deviceId || editor.deviceId || '';
         const customer = data.customers.find(c => c.id === cId), device = data.devices.find(d => d.id === deviceId);
         title = j ? j.number + ' · detail zákazky' : 'Nová zákazka';
-        content = `<p class="form-intro">Vyplňte zákazníka a zadanie. Termín môžete doplniť neskôr.</p><fieldset class="job-section"><legend>1. Zákazník a zariadenie</legend>${customerPicker(cId, 'job-customer', true)}${(0, ui_js_1.button)('Nový kontakt', 'job-new-contact', 'plus', 'btn secondary', 'aria-controls="job-new-customer" aria-expanded="false"')}<fieldset id="job-new-customer" hidden disabled><legend>Nový zákazník</legend><div class="form-grid">${(0, ui_js_1.field)('Meno a priezvisko *', 'newCustomerName', '', 'text', 'required autocomplete="off"')}${(0, ui_js_1.field)('Firma', 'newCustomerCompany')}${(0, ui_js_1.field)('Telefón', 'newCustomerPhone', '', 'tel')}${(0, ui_js_1.field)('E-mail', 'newCustomerEmail', '', 'email')}</div><div id="job-contact-suggestions" class="customer-suggestions" hidden></div>${(0, ui_js_1.field)('Adresa zákazníka', 'newCustomerAddress')}<p class="tiny muted">Po 3 znakoch sa zobrazia kontakty z adresára. Zhodný kontakt sa druhýkrát neuloží.</p></fieldset><label class="field"><span>Zariadenie</span><select name="deviceId" id="job-device">${deviceOptions(data, cId, deviceId)}</select></label>${(0, ui_js_1.field)('Adresa výjazdu', 'address', j?.address || device?.location || customer?.address || '')}</fieldset><fieldset class="job-section"><legend>2. Zadanie zákazky</legend>${(0, ui_js_1.field)('Názov zákazky *', 'title', j?.title || (device ? 'Servis — ' + (0, domain_js_1.deviceName)(device) : ''), 'text', 'required')}${(0, ui_js_1.area)('Zadanie / prejav poruchy', 'issue', j?.issue)}<div class="form-grid">${(0, ui_js_1.select)('Druh práce', 'kind', j?.kind || 'servis', Object.entries(domain_js_1.KINDS))}${(0, ui_js_1.select)('Stav zákazky', 'status', j?.status || (editor.day ? 'planned' : 'new'), Object.entries(domain_js_1.STATUSES))}</div></fieldset><fieldset class="job-section"><legend>3. Termín výjazdu</legend><p class="tiny muted">Bez termínu zostane zákazka v zozname na naplánovanie.</p><div class="form-grid">${(0, ui_js_1.field)('Začiatok výjazdu', 'start', j?.start ? (0, calendar_js_1.localDate)(j.start) : editor.day ? editor.day + 'T' + (editor.time || '09:00') : '', 'datetime-local', '', 'Časové pásmo Europe/Bratislava.')}${(0, ui_js_1.field)('Trvanie v minútach *', 'duration', String(j?.duration || 60), 'number', 'required min="5" max="1440" step="1"')}</div></fieldset><details class="job-completion" ${j ? 'open' : ''}><summary>4. Dokončenie servisu a úhrada</summary><div class="completion-body">${(0, ui_js_1.area)('Vykonaný zásah / riešenie', 'resolution', j?.resolution)}<div class="form-grid">${(0, ui_js_1.select)('Technický výsledok', 'result', j?.result || 'pending', [['pending', 'Kontrola nedokončená'], ['ok', 'Vyhovuje (potvrdil technik)'], ['fail', 'Nevyhovuje (potvrdil technik)']])}${(0, ui_js_1.select)('Úhrada', 'payment', j?.payment || 'unpaid', [['unpaid', 'Neuhradené'], ['paid', 'Uhradené (ručné potvrdenie)']])}${(0, ui_js_1.field)('Dohodnutá konečná suma (€)', 'amount', j?.amount === null || j?.amount === undefined ? '' : String(j.amount), 'number', 'min="0" max="1000000" step="0.01"')}</div><div class="inline-note">Dokončenie zákazky nemení technický výsledok ani úhradu. Táto karta nie je revízna správa.</div></div></details>`;
+        content = `<p class="form-intro">Vyplňte zákazníka a zadanie. Termín môžete doplniť neskôr.</p><fieldset class="job-section"><legend>1. Zákazník a zariadenie</legend>${customerPicker(cId, 'job-customer', true)}${(0, ui_js_1.button)('Nový kontakt', 'job-new-contact', 'plus', 'btn secondary', 'aria-controls="job-new-customer" aria-expanded="false"')}<fieldset id="job-new-customer" hidden disabled><legend>Nový zákazník</legend><div class="form-grid">${(0, ui_js_1.field)('Meno a priezvisko *', 'newCustomerName', '', 'text', 'required autocomplete="off"')}${(0, ui_js_1.field)('Firma', 'newCustomerCompany')}${(0, ui_js_1.field)('Telefón', 'newCustomerPhone', '', 'tel')}${(0, ui_js_1.field)('E-mail', 'newCustomerEmail', '', 'email')}</div><div id="job-contact-suggestions" class="customer-suggestions" hidden></div>${(0, ui_js_1.field)('Adresa zákazníka', 'newCustomerAddress')}<p class="tiny muted">Po 3 znakoch sa zobrazia kontakty z adresára. Zhodný kontakt sa druhýkrát neuloží.</p></fieldset><label class="field"><span>Zariadenie</span><select name="deviceId" id="job-device">${deviceOptions(data, cId, deviceId)}</select></label>${(0, ui_js_1.field)('Adresa výjazdu', 'address', j?.address || editor.googleAddress || device?.location || customer?.address || '')}</fieldset><fieldset class="job-section"><legend>2. Zadanie zákazky</legend>${(0, ui_js_1.field)('Názov zákazky *', 'title', j?.title || editor.googleTitle || (device ? 'Servis — ' + (0, domain_js_1.deviceName)(device) : ''), 'text', 'required')}${(0, ui_js_1.area)('Zadanie / prejav poruchy', 'issue', j?.issue)}<div class="form-grid">${(0, ui_js_1.select)('Druh práce', 'kind', j?.kind || 'servis', Object.entries(domain_js_1.KINDS))}${(0, ui_js_1.select)('Stav zákazky', 'status', j?.status || (editor.day || editor.googleStart ? 'planned' : 'new'), Object.entries(domain_js_1.STATUSES))}</div></fieldset><fieldset class="job-section"><legend>3. Termín výjazdu</legend><p class="tiny muted">Bez termínu zostane zákazka v zozname na naplánovanie.</p><div class="form-grid">${(0, ui_js_1.field)('Začiatok výjazdu', 'start', j?.start ? (0, calendar_js_1.localDate)(j.start) : editor.googleStart ? (0, calendar_js_1.localDate)(editor.googleStart) : editor.day ? editor.day + 'T' + (editor.time || '09:00') : '', 'datetime-local', '', 'Časové pásmo Europe/Bratislava.')}${(0, ui_js_1.field)('Trvanie v minútach *', 'duration', String(j?.duration || editor.googleDuration || 60), 'number', 'required min="5" max="1440" step="1"')}</div><label class="google-check"><input type="checkbox" name="customerNotifications" ${j?.customerNotifications ? 'checked' : ''}> Poslať zákazníkovi pozvánku mesiac pred servisom a e-mailovú pripomienku 3 dni pred termínom</label><p class="tiny muted">Vyžaduje e-mail zákazníka, pripojený Google kalendár a povolené odosielanie cez Gmail. Ak je termín bližšie, pozvánka odíde pri najbližšej synchronizácii.</p>${j && (0, google_sync_js_1.googleLink)(j.id) ? `<div class="google-reply">${(0, ui_js_1.e)((0, google_sync_js_1.customerReply)(j.id, customer?.email || ''))}${(0, google_sync_js_1.googleLink)(j.id)?.last_error ? '<p class="google-message-warning">' + (0, ui_js_1.e)((0, google_sync_js_1.googleLink)(j.id).last_error) + '</p>' : ''}${(0, google_sync_js_1.googleLink)(j.id)?.notice ? '<p>' + (0, ui_js_1.e)((0, google_sync_js_1.googleLink)(j.id).notice) + '</p>' : ''}</div>` : ''}</fieldset><details class="job-completion" ${j ? 'open' : ''}><summary>4. Dokončenie servisu a úhrada</summary><div class="completion-body">${(0, ui_js_1.area)('Vykonaný zásah / riešenie', 'resolution', j?.resolution)}<div class="form-grid">${(0, ui_js_1.select)('Technický výsledok', 'result', j?.result || 'pending', [['pending', 'Kontrola nedokončená'], ['ok', 'Vyhovuje (potvrdil technik)'], ['fail', 'Nevyhovuje (potvrdil technik)']])}${(0, ui_js_1.select)('Úhrada', 'payment', j?.payment || 'unpaid', [['unpaid', 'Neuhradené'], ['paid', 'Uhradené (ručné potvrdenie)']])}${(0, ui_js_1.field)('Dohodnutá konečná suma (€)', 'amount', j?.amount === null || j?.amount === undefined ? '' : String(j.amount), 'number', 'min="0" max="1000000" step="0.01"')}</div><div class="inline-note">Dokončenie zákazky nemení technický výsledok ani úhradu. Táto karta nie je revízna správa.</div></div></details>`;
         if (j)
-            tools = `${(0, ui_js_1.button)('PDF a fotografie', 'job-files', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Kalkulácia servisu', 'cost-job', '', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Cenová ponuka', 'job-quotes', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Správa RS2', 'job-rs2', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${j.costing?.length ? '<div>' + (0, commerce_js_1.costSummary)(j.costing) + '</div>' : ''}${j.start ? (0, ui_js_1.button)('Synchronizovať s Google', 'google-sync-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Pridať do Google (ručne)', 'google-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Do Google sa prenesie uložená verzia zákazky. Pred prenosom uložte úpravy. Pripomienku nastavte po uložení v Google.</p>`;
+            tools = `${(0, ui_js_1.button)('PDF a fotografie', 'job-files', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Kalkulácia servisu', 'cost-job', '', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Cenová ponuka', 'job-quotes', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${(0, ui_js_1.button)('Správa RS2', 'job-rs2', '', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`)}${j.costing?.length ? '<div>' + (0, commerce_js_1.costSummary)(j.costing) + '</div>' : ''}${j.start ? (0, ui_js_1.button)((0, google_sync_js_1.googleLink)(j.id) ? 'Obnoviť Google prepojenie' : 'Preniesť termín do Google', 'google-server-job', 'calendar', 'btn primary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Otvoriť v Google', 'google-open-job', 'calendar', 'btn secondary', `data-id="${(0, ui_js_1.e)(j.id)}"`) + (0, ui_js_1.button)('Export .ics', 'ics-job', 'download', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`) : ''}${(0, ui_js_1.button)('Uložiť do knižnice znalostí', 'tip-from-job', 'knowledge', 'btn ghost', `data-id="${(0, ui_js_1.e)(j.id)}"`)}<p class="tiny muted">Pri zapnutom prepojení sa uložené termíny prenášajú automaticky. Existujúcu Google udalosť môžete pripojiť cez jej detail v kalendári.</p>`;
     }
     if (editor.type === 'job' && editor.id && tools) {
-        const costAt = tools.indexOf('data-action="cost-job"'), googleAt = tools.indexOf('data-action="google-sync-job"');
+        const costAt = tools.indexOf('data-action="cost-job"'), googleAt = tools.indexOf('data-action="google-server-job"');
         const splitBefore = (text, position) => text.lastIndexOf('<button', position);
         const first = splitBefore(tools, costAt), last = googleAt < 0 ? tools.indexOf('<button', tools.indexOf('data-action="job-rs2"') + 1) : splitBefore(tools, googleAt);
         const attachment = tools.slice(0, first), rest = tools.slice(first), calendar = last >= 0 ? tools.slice(last) : '';
@@ -3051,16 +3349,23 @@ function editorContent(editor, data) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.googleSettings = googleSettings;
 const google_calendar_js_1 = require("../lib/google-calendar.js");
+const google_sync_js_1 = require("../lib/google-sync.js");
+const cloud_js_1 = require("../lib/cloud.js");
 const ui_js_1 = require("../ui.js");
 function googleSettings(demo) {
     if (demo)
         return '<section class="panel settings-panel"><h2>Google Kalendár</h2><p>Pripojenie je dostupné iba vo vlastnom pracovnom priestore.</p></section>';
-    const state = (0, google_calendar_js_1.googleState)();
-    return `<section class="panel settings-panel full"><div class="panel-head"><h2>Google Kalendár</h2><span class="tag">${state.connected ? 'Pripojený účet' : 'Nepripojené'}</span></div>
-  <p>Zákazku odošlete tlačidlom „Synchronizovať s Google“ v jej detaile. Opakovaný prenos aktualizuje tú istú udalosť v zvolenom kalendári. Ručné ICS importy a staré Google odkazy sa automaticky nespárujú.</p>
-  ${state.connected ? `<p><strong>Účet: ${(0, ui_js_1.e)(state.account)}</strong></p><label class="field"><span>Cieľový kalendár *</span><select id="google-calendar-select"><option value="">Vyberte kalendár</option>${state.calendars.map(c => `<option value="${(0, ui_js_1.e)(c.id)}" ${state.selected === c.id ? 'selected' : ''}>${(0, ui_js_1.e)(c.summary)}${c.primary ? ' (hlavný)' : ''}</option>`).join('')}</select></label>${(0, ui_js_1.button)('Odpojiť túto reláciu', 'google-disconnect', '', 'btn secondary')}` : `${(0, ui_js_1.button)('Pripojiť Google účet', 'google-connect', 'calendar', 'btn primary')}`}
-  <p class="tiny muted">Prenos je na kliknutie, iba Spektra → Google. Zrušenie alebo zmena zákazky sa neprenesie automaticky. Zmeny v Google zatiaľ nemenia zákazky. Pripojenie platí iba počas tejto relácie a môže vypršať; nie je to prihlásenie do samotnej aplikácie.</p>
-  <details ${(0, google_calendar_js_1.googleClientId)() ? '' : 'open'}><summary>Prvé nastavenie Google pripojenia</summary><p>V Google Cloud povoľte Calendar API a vytvorte OAuth klienta typu Web application. Povolený JavaScript origin: <code>https://spektra-servis.vercel.app</code>. Pri testovacom režime pridajte svoj účet medzi testovacích používateľov.</p>${(0, ui_js_1.field)('OAuth Client ID (verejný identifikátor)', 'googleClientId', (0, google_calendar_js_1.googleClientId)(), 'text', 'id="google-client-id" autocomplete="off" placeholder="…apps.googleusercontent.com"')}${(0, ui_js_1.button)('Uložiť nastavenie', 'google-config-save', 'check')}<p class="tiny muted">Client secret sem nepatrí. Prístupový token sa neukladá do zálohy ani do úložiska prehliadača.</p><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Otvoriť Google Cloud</a></details></section>`;
+    const s = (0, google_sync_js_1.googleSyncState)();
+    return `<section class="panel settings-panel full"><div class="panel-head"><h2>Google Kalendár</h2><span class="tag">${s.enabled && s.connected ? 'Automatické prepojenie' : s.connected ? 'Vyberte kalendár' : s.configured ? 'Pripravené na pripojenie' : 'Čaká na nastavenie'}</span></div><p>Používajte svoj existujúci kalendár. Spektra zobrazí jeho udalosti a spojí ich so zákazkami. Zmeny času z Google sa vracajú k zákazke; servisné dokumenty zostávajú v Spektre.</p>
+ ${!(0, cloud_js_1.cloudUser)() ? '<p class="inline-note">Najskôr sa vyššie prihláste účtom Spektry / Cenových ponúk.</p>' : !cloud_js_1.cloudState.enabled ? '<p class="inline-note">Zapnite synchronizáciu pracovného priestoru vyššie. Na server sa musia dostať aj zákazky.</p>' : ''}
+ ${s.error ? `<p class="form-error" role="alert">${(0, ui_js_1.e)(s.error)}</p>` : ''}
+ ${s.connected ? `<p><strong>${(0, ui_js_1.e)(s.account)}</strong></p><label class="field"><span>Hlavný Google kalendár</span><select id="google-server-calendar"><option value="">Vyberte kalendár</option>${s.calendars.map(c => `<option value="${(0, ui_js_1.e)(c.id)}" ${s.calendarId === c.id ? 'selected' : ''}>${(0, ui_js_1.e)(c.summary)}</option>`).join('')}${s.calendarId && !s.calendars.some(c => c.id === s.calendarId) ? `<option value="${(0, ui_js_1.e)(s.calendarId)}" selected>${(0, ui_js_1.e)(s.calendarName || s.calendarId)}</option>` : ''}</select></label><div class="toolbar">${(0, ui_js_1.button)('Načítať kalendáre', 'google-server-calendars', 'calendar', 'btn secondary')}${(0, ui_js_1.button)('Obnoviť prepojenie', 'google-server-refresh', 'refresh', 'btn secondary')}<a class="btn secondary" href="${(0, ui_js_1.e)((0, google_sync_js_1.googleUrl)())}" target="_blank" rel="noopener noreferrer">Otvoriť Google</a>${(0, ui_js_1.button)('Odpojiť Google', 'google-server-disconnect', '', 'btn ghost')}</div>` : s.configured ? (0, ui_js_1.button)('Pripojiť Google účet', 'google-server-connect', 'calendar', 'btn primary') : ''}
+ ${s.enabled ? `<p class="tiny muted">Server kontroluje zmeny každých 5 minút aj pri zatvorenej aplikácii. Otvorený kalendár načítava udalosti každú minútu. Posledná kontrola: ${s.lastSyncedAt ? (0, ui_js_1.e)(new Date(s.lastSyncedAt).toLocaleString('sk-SK')) : 'zatiaľ neprebehla'}.</p><p class="tiny muted">Staršie zákazky pripojte k existujúcim Google udalostiam alebo odošlite tlačidlom v detaile. Automaticky sa prenášajú nové a upravené zákazky od zapnutia prepojenia.</p>` : ''}
+ <details ${s.configured ? '' : 'open'}><summary>Prvé nastavenie / poverenia Google</summary><p>V existujúcom Google Cloud projekte použite OAuth klienta typu <strong>Web application</strong>. Povoľte Calendar API. Do <strong>Authorized redirect URIs</strong> pridajte:</p><code class="google-redirect">https://spektra-servis.vercel.app/google-callback.html</code>
+ ${(0, ui_js_1.field)('OAuth Client ID', 'googleClientId', s.clientId || (0, google_calendar_js_1.googleClientId)(), 'text', 'id="google-server-client-id" autocomplete="off"')}${(0, ui_js_1.field)('Client secret (iba serverové uloženie)', 'googleClientSecret', '', 'password', 'id="google-server-client-secret" autocomplete="new-password"')}
+ <label class="google-check"><input id="google-server-mail" type="checkbox" ${s.mailEnabled ? 'checked' : ''}> Povoliť odosielanie trojdňových pripomienok z môjho Gmailu</label><p class="tiny muted">Pre túto voľbu povoľte aj Gmail API. Správy sa posielajú iba pri zákazkách, na ktorých zapnete pozvánku a pripomienku. Client secret a obnovovací token sú uložené šifrovane na serveri a nie sú súčasťou záloh aplikácie.</p>
+ ${(0, ui_js_1.button)('Uložiť serverové nastavenie', 'google-server-config', 'check', 'btn secondary')}
+ <p class="tiny muted">Google projekt v režime Testing môže vyžadovať opätovné pripojenie po 7 dňoch. Pre trvalé používanie nastavte vhodný produkčný režim a požadované overenie Google.</p><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Otvoriť Google Cloud</a></details></section>`;
 }
 
 },
@@ -3292,8 +3597,8 @@ function settingsPage(data, isDemo) {
   <section class="panel settings-panel"><div class="panel-head"><h2>Bezpečnosť údajov</h2>${(0, ui_js_1.icon)('lock')}</div><p>Údaje sa ukladajú do IndexedDB aj počas práce offline. Po zapnutí synchronizácie sa prenášajú do vášho účtu v cloude. Zálohu môžete uložiť na OneDrive. Nie je to ochrana heslom — používajte uzamknuté zariadenie.</p><p class="notice">Vymazanie údajov prehliadača alebo strata zariadenia môže vymazať archív. Na novom zariadení zapnite synchronizáciu pod rovnakým účtom.</p><p class="tiny muted">Počet záznamov: ${counts} · veľkosť textových údajov: ${Math.ceil(new TextEncoder().encode(JSON.stringify(data)).length / 1024)} kB</p>${(0, ui_js_1.button)('Požiadať o trvalé úložisko', 'persist-storage', 'shield')}</section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Export zálohy</h2>${(0, ui_js_1.icon)('download')}</div><p>Export zahŕňa zákazníkov, zariadenia, zákazky, servisné poznatky, skladové karty, kalkulácie a profil. Nahraté PDF návody tento export neobsahuje; originály si ponechajte alebo stiahnite z knižnice. Pre osobné údaje odporúčame šifrovanú zálohu.</p>${(0, ui_js_1.field)('Heslo zálohy (voliteľné)', 'backupPassword', '', 'password', 'id="backup-password" autocomplete="new-password" minlength="10"', 'Aspoň 10 znakov. Bez hesla sa exportuje čitateľný JSON. Heslo sa neukladá a nedá sa obnoviť.')}<div class="button-row">${(0, ui_js_1.button)('Stiahnuť zálohu', 'export-backup', 'download', 'btn primary')}</div><p class="tiny muted">Súbor uložte mimo tohto zariadenia na bezpečné miesto.</p></section>
   <section class="panel settings-panel"><div class="panel-head"><h2>Obnovenie zo zálohy</h2>${(0, ui_js_1.icon)('upload')}</div><p>Pred nahradením údajov sa zobrazí počet záznamov na kontrolu. Bez vášho potvrdenia sa nič nemení.</p>${(0, ui_js_1.field)('Heslo pre obnovenie', 'restorePassword', '', 'password', 'id="restore-password" autocomplete="off"')}<label class="field"><span>Súbor zálohy</span><input type="file" id="restore-file" accept=".json,.spektra,application/json"></label>${(0, ui_js_1.button)('Skontrolovať zálohu', 'preview-backup', 'upload')}</section>
-  <section class="panel settings-panel full"><div class="panel-head"><div><h2>Moduly aplikácie</h2><p>Verzia ${domain_js_1.APP_VERSION} · prvá funkčná etapa</p></div><span class="badge done"><i></i>Lokálna verzia</span></div><div class="module-grid">${[['Prehľad a štatistiky', 'Hotové', 'Počty zákaziek a blížiace sa servisy.'], ['Zákazníci a zariadenia', 'Hotové', 'Evidencia, úpravy, archív a história.'], ['Zákazky a kalendár', 'Hotové', 'Termíny, stavy, konflikty, export .ics.'], ['Rady, poruchy a kódy', 'Hotové', 'Vlastné záznamy s označením overenia.'], ['Synchronizácia PC a mobil', 'Hotové', 'Rovnaký účet ako Cenové ponuky; offline zmeny a kontrola konfliktov.'], ['Google Kalendár', 'Vyžaduje nastavenie', 'Pripojenie účtu a prenos zákazky na kliknutie.'], ['Revízne PDF a podpisy', 'Ďalšia etapa', 'Bez zásahu do existujúcej RS2.'], ['Plynové skupiny a paragrafy', 'Obsah na doplnenie', 'Pripravená kategória; bez automatického právneho výkladu.']].map(([title, state, text]) => `<div class="module-item"><span class="tiny ${state === 'Hotové' ? 'success-text' : 'muted'}">${(0, ui_js_1.e)(state)}</span><h3>${(0, ui_js_1.e)(title)}</h3><p>${(0, ui_js_1.e)(text)}</p></div>`).join('')}</div></section>
-  <section class="panel settings-panel full"><h2>Bezplatná prevádzka</h2><p>Aplikácia je nasadená na Verceli. Zákazky sa po prihlásení synchronizujú cez Supabase, prílohy sa ukladajú do OneDrive. Voliteľné Google prepojenie odosiela vybrané termíny do vášho kalendára; limity poskytovateľov sa môžu meniť.</p><div class="button-row"><a class="btn ghost" href="https://supabase.com/pricing" target="_blank" rel="noopener noreferrer">Overiť limity Supabase ${(0, ui_js_1.icon)('external')}</a>${(0, ui_js_1.button)(isDemo ? 'Opustiť ukážku' : 'Otvoriť ukážkové údaje', isDemo ? 'exit-demo' : 'enter-demo', 'sun')}</div><p class="tiny muted">Ukážkové dáta sú oddelené od vašich skutočných záznamov.</p></section></div>`;
+  <section class="panel settings-panel full"><div class="panel-head"><div><h2>Moduly aplikácie</h2><p>Verzia ${domain_js_1.APP_VERSION} · prvá funkčná etapa</p></div><span class="badge done"><i></i>Lokálna verzia</span></div><div class="module-grid">${[['Prehľad a štatistiky', 'Hotové', 'Počty zákaziek a blížiace sa servisy.'], ['Zákazníci a zariadenia', 'Hotové', 'Evidencia, úpravy, archív a história.'], ['Zákazky a kalendár', 'Hotové', 'Termíny, stavy, konflikty, export .ics.'], ['Rady, poruchy a kódy', 'Hotové', 'Vlastné záznamy s označením overenia.'], ['Synchronizácia PC a mobil', 'Hotové', 'Rovnaký účet ako Cenové ponuky; offline zmeny a kontrola konfliktov.'], ['Google Kalendár', 'Vyžaduje nastavenie', 'Existujúci Google kalendár, automatický prenos termínov a odpovede zákazníkov.'], ['Revízne PDF a podpisy', 'Ďalšia etapa', 'Bez zásahu do existujúcej RS2.'], ['Plynové skupiny a paragrafy', 'Obsah na doplnenie', 'Pripravená kategória; bez automatického právneho výkladu.']].map(([title, state, text]) => `<div class="module-item"><span class="tiny ${state === 'Hotové' ? 'success-text' : 'muted'}">${(0, ui_js_1.e)(state)}</span><h3>${(0, ui_js_1.e)(title)}</h3><p>${(0, ui_js_1.e)(text)}</p></div>`).join('')}</div></section>
+  <section class="panel settings-panel full"><h2>Bezplatná prevádzka</h2><p>Aplikácia je nasadená na Verceli. Zákazky sa po prihlásení synchronizujú cez Supabase, prílohy sa ukladajú do OneDrive. Google prepojenie prenáša termíny a zobrazuje udalosti vášho kalendára; limity poskytovateľov sa môžu meniť.</p><div class="button-row"><a class="btn ghost" href="https://supabase.com/pricing" target="_blank" rel="noopener noreferrer">Overiť limity Supabase ${(0, ui_js_1.icon)('external')}</a>${(0, ui_js_1.button)(isDemo ? 'Opustiť ukážku' : 'Otvoriť ukážkové údaje', isDemo ? 'exit-demo' : 'enter-demo', 'sun')}</div><p class="tiny muted">Ukážkové dáta sú oddelené od vašich skutočných záznamov.</p></section></div>`;
 }
 
 },

@@ -10,7 +10,7 @@ import {oneDriveState,oneDriveAccountId,resumeOneDrive,uploadAttachment,attachme
 import { oneDriveClientId, prepareOneDrive, saveOneDriveClientId, connectOneDrive, disconnectOneDrive, uploadOneDriveBackup } from './lib/onedrive.js';
 import { APPS, openIntegration, mapStocks, mergeStockCatalog, totals, type CostLine } from './lib/commerce.js';
 import { mergeContacts, money, costSummary, costRows, readCostRows } from './modules/commerce.js';
-import { googleClientId, prepareGoogle, saveGoogleClientId, connectGoogle, disconnectGoogle, selectGoogleCalendar, syncGoogleJob } from './lib/google-calendar.js';
+import {googleSyncState,googleAction,loadGoogleState,beginGoogleConnect,finishGoogleConnect,loadGoogleEvents,googleUrl,googleLink,eventRange,resetGoogleSync} from './lib/google-sync.js';
 import { setManualRefresh, uploadManual, deleteManual, manualFilter } from './modules/manuals.js';
 import { APP_VERSION, emptyData, stamp, validateData, nextNumber, normalize, sameCustomer, type Data, type Job, type Customer, type Device, type Tip, type SppReport } from './domain.js';
 import { today, addDays, dateLabel, localDate, toUtc, googleCalendarUrl, makeIcs, conflicts } from './lib/calendar.js';
@@ -34,6 +34,7 @@ let state: ViewState = { route: 'home', query: '', filter: '', customerTab: 'cus
 const root = document.querySelector<HTMLElement>('#app')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const toastElement = document.querySelector<HTMLElement>('#toast')!;
+let googleBusy=false,googlePending=false;
 let oneDriveBusy=false, syncBusy=false, fileBusy=false, sppDirty=false;
 let fileQueue:PendingFile[]=[],fileStatus='';
 let integrationBusy=false, costJobId='', costRevision=0, costLines:CostLine[]=[];
@@ -45,6 +46,7 @@ function nav(route: string): void { if(sppDirty&&route!==state.route&&!confirm('
 function render(): void {
   if (!ready) return;
   scheduleStocks();
+  scheduleGoogle();
   // Background saves and connectivity changes must not recreate an embedded
   // editor: cross-origin focus cannot be inspected and its draft lives there.
   const embedded=document.querySelector<HTMLIFrameElement>('.module-frame[data-agenda]');
@@ -65,7 +67,7 @@ setManualRefresh(() => { if (state.route === 'knowledge') render(); });
 async function commit(next: Data, expected = data.revision): Promise<void> {
   if (busy || syncBusy) throw new Error('Počkajte na dokončenie ukladania / synchronizácie.'); busy = true;
   const submit = dialog.querySelector<HTMLButtonElement>('[type=submit]'); if (submit) submit.disabled = true;
-  try { const clean = await save(state.workspace, next, expected); data = clean; render(); if(state.workspace==='real')setTimeout(()=>void syncTick(),700); } finally { busy = false; if (submit) submit.disabled = false; }
+  try { const clean = await save(state.workspace, next, expected); data = clean; googlePending=true; render(); if(state.workspace==='real')setTimeout(()=>void syncTick(),700); } finally { busy = false; if (submit) submit.disabled = false; }
 }
 function canClose(): boolean { return !busy && (!dirty || confirm('Zahodiť neuložené zmeny vo formulári?')); }
 function closeEditor(): boolean { if (!canClose()) return false; dialog.close(); editor = null; pendingEditor = null; dirty = false; return true; }
@@ -106,6 +108,9 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
       else{next.customers.push(customer);customerId=customer.id;}
     }
     const row: Job = { ...(old || common), updatedAt: now, number: old?.number || nextNumber(data, today().slice(0, 4)), customerId, deviceId: s('customerId') === '__new__' ? '' : s('deviceId'), title: s('title'), kind: s('kind') as Job['kind'], status: s('status') as Job['status'], start, duration: Number(s('duration')), address: s('address') || (s('customerId') === '__new__' ? s('newCustomerAddress') : ''), issue: s('issue'), resolution: s('resolution'), result: s('result') as Job['result'], payment: s('payment') as Job['payment'], amount: s('amount') === '' ? null : Number(s('amount')), version: (old?.version ?? -1) + 1 };
+    row.customerNotifications=f.get('customerNotifications')==='on';
+    if(row.customerNotifications&&!next.customers.find(c=>c.id===row.customerId)?.email)throw Error('Pre pozvánku a pripomienku doplňte e-mail zákazníka.');
+    if(editor.googleEventId)row.googleEvent={calendarId:googleSyncState().calendarId,eventId:editor.googleEventId};
     const overlap = conflicts(row, data.jobs); if (overlap.length && !confirm('Termín sa prekrýva so zákazkou ' + overlap.map(j => j.number).join(', ') + '. Uložiť aj napriek prekryvu?')) return;
     next.jobs = old ? next.jobs.map(x => x.id === old.id ? row : x) : [...next.jobs, row];
   }
@@ -215,16 +220,17 @@ async function act(action: string, el: HTMLElement): Promise<void> {
       if(stock?.vat===null)message('DPH nebola v karte určená. Predvyplnených 23 % skontrolujte.');
     }dirty=true;showCost();return;
   }
-  if (['google-connect','google-config-save','google-disconnect','google-sync-job'].includes(action)) {
-    if (state.workspace === 'demo') throw new Error('Google nie je dostupný v ukážkovom priestore.');
-    if (action === 'google-config-save') { await saveGoogleClientId(document.querySelector<HTMLInputElement>('#google-client-id')?.value || ''); render(); message('Nastavenie uložené. Kliknite Pripojiť Google účet.'); return; }
-    if (action === 'google-connect') { await connectGoogle(); render(); message('Google pripojený. Vyberte cieľový kalendár.'); return; }
-    if (action === 'google-disconnect') { disconnectGoogle(); render(); message('Relácia odpojená. Udalosti v Google zostali zachované.'); return; }
-    if (dirty) throw new Error('Najskôr uložte zmeny zákazky.');
-    const job = data.jobs.find(j => j.id === id); if (!job) throw new Error('Zákazka sa nenašla.');
-    const done = await syncGoogleJob(job, data.customers.find(c => c.id === job.customerId));
-    if (done) message('Zákazka bola prenesená do Google Kalendára.');
-    return;
+  if(action.startsWith('google-server-')){await googleServerAction(action,id);return;}
+  if(action==='google-open-job'){
+    if(dirty)throw Error('Najskôr uložte zmeny zákazky.');
+    window.open(googleUrl(googleLink(id)?.event_snapshot),'_blank','noopener,noreferrer');return;
+  }
+  if(action==='google-view-event'){showGoogleEvent(id);return;}
+  if(action==='google-event-close'){document.querySelector<HTMLDialogElement>('#google-event-dialog')?.close();return;}
+  if(action==='google-event-new'){
+    const ev=googleSyncState().events.find(e=>e.id===id),range=ev&&eventRange(ev);
+    if(!ev||!range||ev.start?.date||range.duration>1440)throw Error('Pre zákazku zvoľte časový termín do 24 hodín.');
+    document.querySelector<HTMLDialogElement>('#google-event-dialog')?.close();openEditor('job','',{googleEventId:id,googleStart:range.start,googleDuration:range.duration,googleTitle:ev.summary,googleAddress:ev.location});return;
   }
 
   if (action === 'manual-delete' && state.workspace === 'real') return deleteManual(id);
@@ -332,7 +338,7 @@ document.addEventListener('input', event => {
 document.addEventListener('change', event => {
   const el = event.target as HTMLSelectElement;
   if(el.matches('[data-stock-category]')){stockView.category=el.value;stockView.page=0;stockView.result=null;render();return;}
-  if (el.id === 'google-calendar-select') { try { selectGoogleCalendar(el.value); message('Cieľový kalendár vybraný.'); } catch (error) { fail(error); } }
+  if(el.id==='google-server-calendar'&&el.value){void (async()=>{if(!cloudState.enabled)throw Error('Najskôr zapnite synchronizáciu pracovného priestoru.');await googleAction('select',{calendarId:el.value});render();await googleTick(true);message('Hlavný Google kalendár je pripojený.');})().catch(fail);}
   if (el.id === 'manual-filter') manualFilter(el.value);
   if (el.id === 'job-filter' || el.id === 'customer-filter') { state.filter = el.value; render(); }
   if (el.id === 'job-customer') {
@@ -399,8 +405,8 @@ async function setupPwa(): Promise<void> {
 }
 async function init(): Promise<void> {
   if(oneDriveClientId())void resumeOneDrive().then(()=>{if(ready&&!document.querySelector('input:focus,select:focus,textarea:focus'))render();}).catch(()=>{});
-  if (googleClientId()) void prepareGoogle().catch(() => {});
-  try { data = await load('real'); ready = true; const route = location.hash.slice(1); if (routes.some(r => r[0] === route) || route === 'settings') state.route = route; render(); void initCloud().then(()=>{if(!document.querySelector('input:focus,select:focus,textarea:focus'))render();void syncTick();}).catch(()=>{});void queuedFiles().then(q=>{fileQueue=q;});setInterval(()=>void syncTick(),15000);setInterval(()=>void fileTick(),15000); await setupPwa(); }
+
+  try { data = await load('real'); ready = true; const route = location.hash.slice(1); if (routes.some(r => r[0] === route) || route === 'settings') state.route = route; render(); void initCloud().then(async()=>{try{const connected=await finishGoogleConnect();await loadGoogleState();if(connected){message('Google účet pripojený. Vyberte hlavný kalendár.');await googleAction('calendars');}}catch(e){fail(e);}if(!document.querySelector('input:focus,select:focus,textarea:focus'))render();void syncTick();void googleTick(true);}).catch(()=>{});void queuedFiles().then(q=>{fileQueue=q;});setInterval(()=>void syncTick(),15000);setInterval(()=>void fileTick(),15000);setInterval(()=>void googleTick(true),60000); await setupPwa(); }
   catch (err) { root.innerHTML = `<main class="fatal"><h1>Údaje sa nepodarilo otvoriť</h1><p>${e(err instanceof Error ? err.message : err)}</p><p>Nič sa neprepísalo. Nevymazávajte údaje prehliadača. Skúste aplikáciu otvoriť cez lokálny server alebo podporovaný prehliadač.</p></main>`; }
 }
 void init();
@@ -422,11 +428,12 @@ document.addEventListener('submit',event=>{
 
 function showSyncStatus():void{document.querySelectorAll('#sync-status,.save-state,.storage-banner > span').forEach(el=>el.textContent=cloudState.status);}
 async function syncTick(choice?:'local'|'remote'):Promise<void>{
- if(!ready||state.workspace!=='real'||busy||syncBusy||oneDriveBusy||fileBusy||dialog.open||dirty||!cloudState.enabled)return;
+ if(!ready||state.workspace!=='real'||busy||syncBusy||googleBusy||oneDriveBusy||fileBusy||dialog.open||dirty||!cloudState.enabled)return;
  // Avoid replacing partially entered settings / upload fields during polling.
  const run=async()=>{syncBusy=true;try{const result=await synchronize(choice);if(result){data=result;if(!document.querySelector('input:focus,select:focus,textarea:focus'))render();}showSyncStatus();if(cloudState.conflicts.length&&state.route==='settings'&&!document.querySelector('input:focus'))render();}catch(err){cloudState.status=err instanceof Error?err.message:'Synchronizácia sa zopakuje';showSyncStatus();}finally{syncBusy=false;}};
  if(navigator.locks)await navigator.locks.request('spektra-sync',{ifAvailable:true},async lock=>{if(lock)await run();});else await run();
  void fileTick();
+ if(googlePending&&!cloudState.conflicts.length){googlePending=false;void googleTick(true,true);}
 }
 async function cloudAction(action:string,id:string):Promise<void>{
  if(state.workspace!=='real'||busy||dirty||dialog.open||oneDriveBusy||fileBusy)throw Error('Najskôr dokončite otvorený formulár alebo prenos.');
@@ -434,7 +441,7 @@ async function cloudAction(action:string,id:string):Promise<void>{
   if(!confirm('Prepojiť miestne údaje s účtom '+cloudState.email+'? Existujúce údaje oboch zariadení sa zlúčia. Pred prepojením sa uloží ochranná miestna kópia.'))return;
   data=await enableCloud();render();await syncTick();return;
  }
- if(action==='sync-logout'){await logoutCloud();render();return;}
+ if(action==='sync-logout'){await logoutCloud();resetGoogleSync();render();return;}
  if(action==='sync-now'){await syncTick();render();return;}
  if(action==='sync-local'||action==='sync-remote'){
   if(!confirm('Pri konfliktných poliach použiť '+(action==='sync-local'?'hodnoty tohto zariadenia':'hodnoty z cloudu')+'? Ostatné zmeny sa zlúčia.'))return;
@@ -481,7 +488,7 @@ async function fileTick():Promise<void>{
 }
 document.addEventListener('submit',event=>{
  const form=event.target as HTMLFormElement;
- if(form.id==='sync-login-form'){event.preventDefault();if(syncBusy||fileBusy||busy){message('Počkajte na dokončenie prenosu.',true);return;}const fields=new FormData(form),email=String(fields.get('email')||''),password=String(fields.get('password')||'');form.reset();void loginCloud(email,password).then(()=>{render();void syncTick();}).catch(fail);}
+ if(form.id==='sync-login-form'){event.preventDefault();if(syncBusy||fileBusy||busy){message('Počkajte na dokončenie prenosu.',true);return;}const fields=new FormData(form),email=String(fields.get('email')||''),password=String(fields.get('password')||'');form.reset();void loginCloud(email,password).then(async()=>{render();void syncTick();await loadGoogleState();render();void googleTick(true);}).catch(fail);}
  if(form.id==='attachment-form'){event.preventDefault();const fields=new FormData(form),files=fields.getAll('files').filter((x):x is File=>x instanceof File&&!!x.name);void enqueue(files.map(f=>({file:f,name:f.name})),String(fields.get('jobId')||'')).catch(fail);}
 });
 window.addEventListener('online',()=>{void syncTick();void resumeOneDrive().then(()=>fileTick()).catch(()=>{});});
@@ -519,3 +526,54 @@ function renderStockContent():void{
 }
 setInterval(()=>{if(document.visibilityState==='visible'&&!stockView.loading&&!document.querySelector('#page-search:focus, [data-stock-category]:focus'))void refreshStocks();},60000);
 window.addEventListener('online',()=>void refreshStocks());
+
+let googleTimer:ReturnType<typeof setTimeout>|undefined;
+function scheduleGoogle():void{
+ if(!ready||state.workspace!=='real'||!['calendar','home'].includes(state.route)||!googleSyncState().enabled)return;
+ clearTimeout(googleTimer);googleTimer=setTimeout(()=>void googleTick(),200);
+}
+async function googleTick(force=false,push=false):Promise<void>{
+ if(!ready||state.workspace!=='real'||!cloudUser()||googleBusy||busy||syncBusy||dialog.open||dirty||!navigator.onLine)return;
+ const g=googleSyncState();if(!g.connected||!g.calendarId)return;googleBusy=true;
+ try{
+  if(push&&cloudState.enabled)await googleAction('sync');
+  const date=state.calendarMode==='month'&&state.route!=='home'?state.month+'-01':state.date;
+  const from=addDays(date,-8)+'T00:00:00Z',to=addDays(date,45)+'T00:00:00Z';
+  const old=JSON.stringify(g);await loadGoogleEvents(from,to,force);
+  if(old!==JSON.stringify(googleSyncState())&&!document.querySelector('input:focus,select:focus,textarea:focus'))render();
+ }catch(error){googleSyncState().error=error instanceof Error?error.message:'Google synchronizácia sa zopakuje.';if(!document.querySelector('input:focus,select:focus,textarea:focus'))render();}finally{googleBusy=false;}
+}
+async function googleServerAction(action:string,id:string):Promise<void>{
+ if(state.workspace!=='real')throw Error('Google je dostupný iba vo vlastnom pracovnom priestore.');
+ if(googleBusy||busy)throw Error('Počkajte na dokončenie Google prenosu.');
+ if(dirty)throw Error('Najskôr uložte rozpracované zmeny.');
+ if(action==='google-server-refresh'){await loadGoogleState();await googleTick(true,true);render();return;}
+ googleBusy=true;
+ try{
+  if(action==='google-server-config'){
+   const input=document.querySelector<HTMLInputElement>('#google-server-client-secret');
+   const clientSecret=input?.value||'';if(input)input.value='';
+   await googleAction('configure',{clientId:document.querySelector<HTMLInputElement>('#google-server-client-id')?.value.trim()||'',clientSecret,mailEnabled:document.querySelector<HTMLInputElement>('#google-server-mail')?.checked||false});message('Poverenia sú uložené na serveri. Teraz pripojte Google účet.');
+  }else if(action==='google-server-connect'){await beginGoogleConnect();}
+  else if(action==='google-server-calendars'){await googleAction('calendars');}
+  else if(action==='google-server-disconnect'){
+   if(!confirm('Odpojiť Google a zastaviť automatické prenosy a správy? Udalosti aj zákazky zostanú zachované.'))return;
+   await googleAction('disconnect');message('Google bol odpojený.');
+  }else if(action==='google-server-job'){
+   if(!cloudState.enabled)throw Error('Najskôr zapnite synchronizáciu pracovného priestoru.');
+   const saved=await synchronize();if(saved)data=saved;if(cloudState.conflicts.length)throw Error('Najskôr vyriešte konflikt synchronizácie v Nastaveniach.');
+   await googleAction('sync',{jobId:id});const refreshed=await synchronize();if(refreshed)data=refreshed;if(editor?.type==='job'&&editor.id===id&&!dirty)openEditor('job',id);const link=googleLink(id);if(link?.last_error)throw Error(link.last_error);if(googleSyncState().error)throw Error(googleSyncState().error);message('Google udalosť je prepojená.');
+  }else if(action==='google-server-link'){
+   const jobId=document.querySelector<HTMLSelectElement>('#google-link-job')?.value;if(!jobId)throw Error('Vyberte zákazku.');
+   const saved=await synchronize();if(saved)data=saved;if(cloudState.conflicts.length)throw Error('Najskôr vyriešte konflikt synchronizácie v Nastaveniach.');
+   await googleAction('link',{jobId,eventId:id});const refreshed=await synchronize();if(refreshed)data=refreshed;document.querySelector<HTMLDialogElement>('#google-event-dialog')?.close();message('Udalosť je pripojená k zákazke.');
+  }
+ }finally{googleBusy=false;render();}
+}
+function showGoogleEvent(id:string):void{
+ const g=googleSyncState(),ev=g.events.find(x=>x.id===id);if(!ev)return;
+ let popup=document.querySelector<HTMLDialogElement>('#google-event-dialog');if(!popup){popup=document.createElement('dialog');popup.id='google-event-dialog';popup.className='google-event-detail';document.body.append(popup);}
+ const range=eventRange(ev),when=ev.start?.date?dateLabel(ev.start.date):range?dateLabel(range.start,{dateStyle:'full',timeStyle:'short'}):'Bez termínu';
+ popup.innerHTML=`<div class="panel-head"><h2>${e(ev.summary)}</h2>${button('Zavrieť','google-event-close','close','icon-btn')}</div><p>${e(when)}</p><p>${e(ev.location||'')}</p><div class="toolbar"><a class="btn secondary" href="${e(googleUrl(ev))}" target="_blank" rel="noopener noreferrer">Otvoriť v Google</a>${button('Vytvoriť zákazku','google-event-new','plus','btn primary',`data-id="${e(id)}"`)}</div><hr><label class="field"><span>Pripojiť k existujúcej zákazke</span><select id="google-link-job"><option value="">Vyberte zákazku</option>${data.jobs.filter(j=>!g.links.some(l=>l.job_id===j.id)&&j.status!=='cancelled').map(j=>`<option value="${e(j.id)}">${e(j.number+' · '+j.title)}</option>`).join('')}</select></label>${button('Pripojiť udalosť','google-server-link','calendar','btn secondary',`data-id="${e(id)}"`)}<p class="tiny muted">Zákazka prevezme dátum a čas z Google. Jej dokumenty a kalkulácia zostanú zachované.</p>`;
+ popup.showModal();
+}

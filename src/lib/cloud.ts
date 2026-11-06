@@ -134,3 +134,12 @@ export async function readPohodaCategories():Promise<StockCategory[]>{
  const c=await sdk();if(!user)throw Error('Prihláste sa účtom Cenových ponúk.');
  return queryStockCategories(c);
 }
+
+/** Authenticated Google worker call. OAuth secrets never enter the app backup. */
+export async function googleServerRequest(body:Record<string,unknown>):Promise<any>{
+ const c=await sdk();const {data}=await c.auth.getSession();
+ if(!data.session?.access_token)throw Error('Najskôr sa prihláste do Spektry v Nastaveniach.');
+ const response=await fetch('https://rrakzoicawqbcpnzavet.supabase.co/functions/v1/google-calendar',{method:'POST',headers:{Authorization:'Bearer '+data.session.access_token,apikey:'sb_publishable_ZZOAMeOcSHS6IGghKIu1lA_xss5sJzK','Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(body.action==='sync'?120000:45000)});
+ const result=await response.json().catch(()=>({error:'Google prepojenie nie je dostupné.'}));
+ if(!response.ok)throw Error(result.error||'Google prepojenie nie je dostupné.');return result;
+}

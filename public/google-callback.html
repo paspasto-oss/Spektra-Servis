@@ -1,0 +1,3 @@
+<!doctype html><html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>Pripojenie Google · Spektra</title></head><body><p id="status">Dokončujem pripojenie Google…</p><script>
+(function(){const params=new URLSearchParams(location.search);history.replaceState(null,'',location.pathname);try{sessionStorage.setItem('spektra-google-return',JSON.stringify({code:params.get('code'),state:params.get('state'),error:params.get('error')}));location.replace('./#settings');}catch{document.getElementById('status').textContent='Prehliadač nepovolil dokončiť prihlásenie. Otvorte Spektru v bežnom prehliadači a pripojte Google znovu.';}})();
+</script></body></html>

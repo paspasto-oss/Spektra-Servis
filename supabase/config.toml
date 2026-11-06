@@ -1,0 +1,3 @@
+[functions.google-calendar]
+# The handler validates Supabase users and the independent Vault-backed cron key.
+verify_jwt = false
