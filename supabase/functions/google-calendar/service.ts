@@ -127,7 +127,9 @@ export function createHandler(db:any,http:typeof fetch=fetch){
   const origin=req.headers.get('Origin');const cors=origin===APP_ORIGIN||/^http:\/\/(localhost|127\.0\.0\.1|terminal\.local)(:\d+)?$/.test(origin||'')?origin:'';
   const headers:Record<string,string>={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin',...(cors?{'Access-Control-Allow-Origin':cors,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS'}:{})};
   const response=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
-  if(req.method==='OPTIONS')return new Response('',{status:204,headers});
+  // A 204 response must have a null body. Even '' throws before CORS headers
+  // reach the browser, hiding the error behind a generic "Failed to fetch".
+  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(req.method!=='POST')return response({error:'Použite POST.'},405);
   if(origin&&!cors)return response({error:'Nepovolený pôvod požiadavky.'},403);
   try{

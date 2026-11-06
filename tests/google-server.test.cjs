@@ -1,6 +1,19 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');const ts=require('typescript');
 function load(file){const filename=path.resolve(__dirname,'../supabase/functions/google-calendar',file);const m=new Module(filename,module);m.filename=filename;m.paths=module.paths;m.require=request=>request.endsWith('.ts')?load(request):require(request);m._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,filename);return m.exports;}
 const core=load('core.ts'),{createHandler}=load('service.ts');
+test('browser preflight succeeds without authentication and permits the app request headers',async()=>{
+ const handler=createHandler({}),headers={Origin:core.APP_ORIGIN,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'authorization,apikey,content-type'};
+ const r=await handler(new Request('https://worker.test',{method:'OPTIONS',headers}));
+ assert.equal(r.status,204);assert.equal(r.body,null);assert.equal(await r.text(),'');
+ assert.equal(r.headers.get('Access-Control-Allow-Origin'),core.APP_ORIGIN);
+ const allowed=r.headers.get('Access-Control-Allow-Headers').split(',').map(x=>x.trim());
+ for(const h of ['authorization','apikey','content-type'])assert.ok(allowed.includes(h));
+ assert.ok(r.headers.get('Access-Control-Allow-Methods').split(',').map(x=>x.trim()).includes('POST'));
+ const denied=await handler(new Request('https://worker.test',{method:'OPTIONS',headers:{...headers,Origin:'https://other.example'}}));
+ assert.equal(denied.headers.get('Access-Control-Allow-Origin'),null);
+ const noSession=await handler(new Request('https://worker.test',{method:'POST',headers:{Origin:core.APP_ORIGIN,'Content-Type':'application/json'},body:'{"action":"status"}'}));
+ assert.equal(noSession.status,401);assert.equal(noSession.headers.get('Access-Control-Allow-Origin'),core.APP_ORIGIN);
+});
 const future=(days=10)=>new Date(Date.now()+days*86400000).toISOString();
 const sample=()=>({id:'job1',customerId:'customer1',number:'S-2026-001',title:'Servis kotla',start:future(),duration:60,status:'planned',address:'Rajec',issue:'Kontrola',updatedAt:new Date().toISOString(),createdAt:new Date().toISOString(),version:0});
 const event=(j)=>({id:'event1',etag:'"v1"',...core.eventBody(core.jobSnapshot(j,{name:'Zákazník'}),j.id)});
