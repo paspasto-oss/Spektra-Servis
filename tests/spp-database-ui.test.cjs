@@ -75,3 +75,50 @@ test('Draft print requires a complete pressure test and exposes the missing fiel
  assert.match(h.alerts.at(-1),/PDF nemožno vytvoriť/);assert.match(h.el('check-list').innerHTML,/skutočne namerané tlaky/);assert.match(h.el('printable').innerHTML,/PRACOVNÝ NÁHĽAD/);
 });
 
+test('New copper d22 reports have construction descriptions but no fabricated inspection evidence',()=>{
+ const h=start();
+ for(const key of ['scope','deviceId','technicalParameters','dimensions'])assert.match(h.field(key).value,/d22/);
+ assert.match(h.field('technicalParameters').value,/22 mm/);
+ assert.match(h.field('technicalParameters').value,/lisované spoje/);
+ assert.equal(h.field('testedSection').value,h.field('scope').value);
+ for(const key of ['pipeLength','volume','valveCount','operatingPressure','measuredPressure','mop','valves','instruments','documents','findings','group','conclusion','defectStatus','shutdownRequired','strengthGauge','strengthStart','strengthEnd','strengthAssessment','tightStart','tightEnd','tightAssessment'])assert.equal(h.field(key).value,'',key);
+ assert.equal(h.field('pressureBasisConfirmed').checked,false);
+ h.el('save').onclick();
+ const saved=JSON.parse(h.sent.at(-1).report.payload);
+ assert.equal(saved.dimensions,h.field('dimensions').value);
+});
+
+test('Copper template fills only empty draft fields and preserves recorded measurements and descriptions',()=>{
+ const h=screen(),report={id:'copper-draft',reportNo:'RS-2026-25',inspectionDate:'2026-11-09',state:'draft',updatedAt:'2026-11-09T12:00:00Z',payload:JSON.stringify({scope:'Od plynomera po kotol',deviceId:'Vetva kotolne',technicalParameters:'Vlastný opis Cu d22',dimensions:'   ',strengthPressure:'6',strengthStart:'6',strengthEnd:'6',strengthAssessment:'Vyhovela',pressureBasisConfirmed:true})};
+ h.deliver({type:'spp-state',customers:[],reports:[report],settings:{}});
+ h.el('archive-list').onclick({target:{closest:()=>({dataset:{open:report.id}})}});
+ assert.equal(h.field('dimensions').value,'   ','loading must not apply the template');
+ h.el('apply-copper-template').onclick();
+ assert.match(h.field('dimensions').value,/Cu d22/);
+ assert.equal(h.field('scope').value,'Od plynomera po kotol');
+ assert.equal(h.field('testedSection').value,'Od plynomera po kotol');
+ assert.equal(h.field('deviceId').value,'Vetva kotolne');
+ assert.equal(h.field('technicalParameters').value,'Vlastný opis Cu d22');
+ assert.equal(h.field('strengthPressure').value,'6');
+ assert.equal(h.field('strengthStart').value,'6');
+ assert.equal(h.field('strengthEnd').value,'6');
+ assert.equal(h.field('strengthAssessment').value,'Vyhovela');
+ assert.equal(h.field('pressureBasisConfirmed').checked,false);
+ assert.equal(h.sent.at(-1).dirty,true);
+ h.field('pressureBasisConfirmed').checked=true;
+ h.el('apply-copper-template').onclick();
+ assert.equal(h.field('pressureBasisConfirmed').checked,true,'repeated application without changes is a no-op');
+ assert.match(h.el('copper-template-status').textContent,/Žiadny údaj sa nezmenil/);
+ h.el('save').onclick();
+ assert.match(JSON.parse(h.sent.at(-1).report.payload).dimensions,/Cu d22/);
+});
+
+test('Copper template cannot change a reviewed or issued report',()=>{
+ for(const state of ['ready','issued']){
+  const h=start();h.field('state').value=state;h.field('dimensions').value='';
+  h.el('apply-copper-template').onclick();
+  assert.equal(h.field('dimensions').value,'');
+  assert.match(h.alerts.at(-1),/iba do rozpracovanej/);
+ }
+});
+
