@@ -28,6 +28,29 @@
 }
 .database-tools h2{margin-bottom:10px}.database-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.database-filters .btn{min-height:44px;font-size:12px}.database-filters b{margin-left:5px}.database-search{display:grid;grid-template-columns:2fr 1fr;gap:10px}.database-tools #archive-count{margin:10px 0 0}.archive-row .toolbar{align-content:center}.archive-row h3{margin-top:7px}.archive-row p{margin-top:5px}body>main{padding-bottom:30px}
 @media(max-width:500px){.database-search{grid-template-columns:1fr}.database-filters{gap:4px}.database-filters .btn{padding:6px 8px;font-size:11px}}
+/* Keep the report wide and combine section navigation with actions on desktop. */
+@media screen {
+ .view{max-width:none;width:100%;padding:12px 16px}
+ .card{padding:16px;margin-bottom:12px}
+ .top .btn{min-height:38px;padding:7px 10px}
+ .tabs{padding:4px 8px;gap:4px}
+ .tabs button{min-height:38px;padding:7px 10px}
+ body>main{padding-bottom:8px}
+}
+@media screen and (min-width:1100px){
+ body{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr)}
+ .tabs{grid-column:1;grid-row:1;min-width:0;align-items:center}
+ .top{grid-column:2;grid-row:1;min-width:0;padding:4px 8px;gap:5px}
+ .top .spacer{display:none}
+ .top .status{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ body>main{grid-column:1/-1;grid-row:2}
+}
+@media screen and (max-width:760px){
+ .view{padding:8px}
+ .card{padding:12px}
+ .top .btn,.tabs button{min-height:44px}
+}
+@media screen and (pointer:coarse){.top .btn,.tabs button{min-height:44px}}
 </style></head><body>
 <header class="top"><strong title="SPP · revízne správy">SPP</strong><span id="save-status" class="status">Pripravené</span><span class="spacer"></span><button class="btn ghost" id="new">Nová</button><button class="btn secondary" id="duplicate">Kópia</button><button class="btn primary" id="save">Uložiť</button><button class="btn secondary" id="print">Tlač / PDF</button></header>
 <nav class="tabs" aria-label="Časti SPP"><button data-tab="archive" class="active">Databáza</button><button data-tab="form">Formulár</button><button data-tab="pressure">Tlaková skúška</button><button data-tab="gas-admission">Napustenie plynu</button><button data-tab="checks">Kontrola</button><button data-tab="preview">Náhľad</button></nav>
@@ -249,4 +272,5 @@ window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==
 </script>
 
 </body></html>
+
 
