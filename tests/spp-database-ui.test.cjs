@@ -173,3 +173,44 @@ test('Example cannot be issued or enter contacts; copies retain provenance and a
  h.el('print').onclick();assert.match(h.alerts.at(-1),/PDF nemožno vytvoriť/);
  assert.equal(h.printed.length,1,'an ordinary incomplete report still cannot print');
 });
+
+test('SPP remembers setup once and new reports reuse it without readings or approvals',()=>{
+ const h=start();change(h,'strengthGauge','Manometer 123');change(h,'strengthCalibration','Doklad 2026-01');change(h,'procedureArticle','Overený článok RT');change(h,'mop','2');change(h,'operatingPressure','2');change(h,'volume','6.3');change(h,'strengthStart','5');
+ h.field('pressureBasisConfirmed').checked=true;h.el('save-profile').onclick();
+ const request=h.sent.at(-1);assert.equal(request.type,'spp-save-profile');assert.equal(request.expectedProfile,'null');
+ assert.equal(request.values.strengthGauge,'Manometer 123');assert.equal(request.values.strengthStart,undefined);assert.equal(request.values.volume,undefined);assert.equal(request.values.pressureBasisConfirmed,undefined);
+ const profile={version:1,values:request.values};h.deliver({type:'spp-profile-saved',profile});
+ assert.equal(h.el('save-profile').disabled,false);h.el('new').onclick();
+ assert.equal(h.field('strengthGauge').value,'Manometer 123');assert.equal(h.field('procedureArticle').value,'Overený článok RT');assert.equal(h.field('mop').value,'2');
+ assert.equal(h.field('strengthStart').value,'');assert.equal(h.field('volume').value,'');assert.equal(h.field('pressureBasisConfirmed').checked,false);
+ const next=screen();next.deliver({type:'spp-state',customers:[],reports:[],settings:{sppProfile:profile}});next.el('new').onclick();
+ assert.equal(next.field('strengthGauge').value,'Manometer 123');
+ change(next,'strengthGauge','Vlastné meradlo');next.deliver({type:'spp-state',customers:[],reports:[],settings:{sppProfile:{version:1,values:{strengthGauge:'Iné'}}}});
+ assert.equal(next.field('strengthGauge').value,'Vlastné meradlo','background sync must not overwrite an open report');
+ next.el('apply-profile').onclick();assert.equal(next.field('strengthGauge').value,'Vlastné meradlo');
+ next.el('new-copper-example').onclick();next.el('save-profile').onclick();assert.match(next.alerts.at(-1),/Modelové údaje/);
+});
+
+test('Equal-pressure shortcut requires actual start and explicit action; generated text follows readings',()=>{
+ const h=start();h.el('same-strength').onclick();assert.equal(h.field('strengthEnd').value,'');
+ change(h,'strengthPressure','5');h.el('same-strength').onclick();assert.equal(h.field('strengthEnd').value,'','a target is never a measurement');
+ change(h,'strengthStart','5.01');assert.equal(h.field('strengthEnd').value,'');h.el('same-strength').onclick();assert.equal(h.field('strengthEnd').value,'5.01');
+ assert.equal(h.field('strengthAssessment').value,'');assert.equal(h.field('pressureBasisConfirmed').checked,false);
+ change(h,'tightStart','2.02');h.el('same-tight').onclick();h.el('next-output').onclick();
+ assert.match(h.field('pressureResult').value,/5.01 → 5.01/);assert.match(h.field('findings').value,/2.02 → 2.02/);
+ change(h,'tightEnd','2.01');assert.match(h.field('pressureResult').value,/pokles 0.010/);
+ change(h,'findings','Môj vlastný zápis');change(h,'tightEnd','2.00');assert.equal(h.field('findings').value,'Môj vlastný zápis');
+ change(h,'state','issued');const previous=h.field('strengthEnd').value;change(h,'strengthStart','5.2');h.el('same-strength').onclick();assert.equal(h.field('strengthEnd').value,previous);
+});
+
+test('Profile save failures allow retry and do not change the active report',()=>{
+ const h=start();change(h,'strengthGauge','Prístroj');h.el('save-profile').onclick();h.deliver({type:'spp-profile-error',message:'Skúste znova'});
+ assert.equal(h.el('save-profile').disabled,false);assert.equal(h.field('strengthGauge').value,'Prístroj');
+ h.el('save-profile').onclick();assert.equal(h.sent.at(-1).type,'spp-save-profile');
+});
+
+test('A new report reuses the customer address as inspection place until manually changed',()=>{
+ const h=start();change(h,'street','Ulica 12');change(h,'city','Rajec');
+ assert.equal(h.field('inspectionPlace').value,'Ulica 12, Rajec');
+ change(h,'inspectionPlace','Iný objekt');change(h,'city','Žilina');assert.equal(h.field('inspectionPlace').value,'Iný objekt');
+});

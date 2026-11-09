@@ -7,7 +7,7 @@ const {mergeData}=require('../.build/lib/sync-merge.js');
 
 test('SPP HTML contains legally structured form, controlled pressure test and optional fourth A4 page',()=>{
  const html=fs.readFileSync('public/spp-app.html','utf8');
- for(const value of ['SOPAS','Tlaková skúška','Kontrola','Databáza','reportTemplate','Východisková','Po rekonštrukcii / oprave','Prevádzková / opakovaná','employerAuthorization','deviceId','technicalParameters','procedureArticle','strengthGaugeResolution','tightGaugeResolution','strengthDrop','tightDrop','tech-sign','customer-sign','@media print','submissionDate','spp-save','§ 16 ods. 2','STN EN 1775:2008','TPP 704 01-R1:2026','Strana ${n} / ${pages}','footer(1)','footer(3)'])assert.ok(html.includes(value),value);
+ for(const value of ['SOPAS','Meranie na zákazke','Kontrola','Databáza','reportTemplate','Východisková','Po rekonštrukcii / oprave','Prevádzková / opakovaná','employerAuthorization','deviceId','technicalParameters','procedureArticle','strengthGaugeResolution','tightGaugeResolution','strengthDrop','tightDrop','tech-sign','customer-sign','@media print','submissionDate','spp-save','§ 16 ods. 2','STN EN 1775:2008','TPP 704 01-R1:2026','Strana ${n} / ${pages}','footer(1)','footer(3)'])assert.ok(html.includes(value),value);
  assert.ok(!html.includes('Milan Rajčan'));
  for(const value of ["pressurePreset:'ntl'","settlingMinutes:'15'","pressureBasisConfirmed:false"])assert.ok(html.includes(value),value);
  for(const value of ["strengthPressure:'600'","strengthMinutes:'180'","tightPressure:'6'","tightMinutes:'180'"])assert.ok(!html.includes(value),value);
@@ -56,3 +56,23 @@ test('SPP database combines status and accent-insensitive search and orders by d
  assert.equal(rows[0].id,'a');
 });
 
+
+test('SPP reusable profile survives backup and synchronization but rejects observations',()=>{
+ const {SPP_PROFILE_FIELDS}=require('../.build/domain.js');
+ const base=emptyData(),local=emptyData(),remote=emptyData();
+ local.settings.sppProfile={version:1,values:{procedure:'Overený postup RT',procedureArticle:'6.5',strengthGauge:'Skutočný manometer 123',mop:'2',strengthPressure:'5'}};
+ const restored=validateData(JSON.parse(JSON.stringify(local)));
+ assert.deepEqual(restored.settings.sppProfile,local.settings.sppProfile);
+ remote.settings.company='Nová firma';
+ const merged=mergeData(base,restored,remote);
+ assert.equal(merged.conflicts.length,0);assert.equal(merged.data.settings.company,'Nová firma');
+ assert.equal(merged.data.settings.sppProfile.values.strengthGauge,'Skutočný manometer 123');
+ for(const key of ['strengthStart','tightEnd','pressureBasisConfirmed','customerName','volume','conclusion','safe0']){
+  const invalid=structuredClone(local);invalid.settings.sppProfile.values[key]='nie';
+  assert.throws(()=>validateData(invalid),/profil SPP/);
+ }
+ const html=fs.readFileSync('public/spp-app.html','utf8'),match=html.match(/const profileFields=(\[[^;]+\]);/);
+ assert.deepEqual(vm.runInNewContext(match[1]).join(','),SPP_PROFILE_FIELDS.join(','));
+ const a=structuredClone(local),b=structuredClone(local);a.settings.sppProfile.values.strengthGauge='A';b.settings.sppProfile.values.strengthGauge='B';
+ assert.ok(mergeData(local,a,b).conflicts.some(c=>c.includes('strengthGauge')));
+});

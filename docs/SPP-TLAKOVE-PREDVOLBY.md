@@ -53,3 +53,13 @@ Príklad predpokladá Cu 22 × 1 mm, 20 m, približne 6,3 l samotnej rúry bez t
 Príznak exampleMode sa ukladá v payload a zachováva pri kópii. Vzor možno uložiť iba v stave draft. Každá strana náhľadu aj tlače obsahuje výrazné označenie VZOR a vodoznak. Tlač vzoru je dovolená bez kontroly určenej na vydanie skutočnej správy. Nová skutočná správa začína bez modelových meraní.
 
 Testy overujú oddelené uloženie, opätovné načítanie, blokovanie vydania, vypnutie ukladania kontaktu, označenie všetkých štyroch strán, zachovanie označenia pri kópii a pôvodnú kontrolu skutočných správ.
+
+## Kratší pracovný postup a uložený profil
+
+SPP používa kroky Zákazka → Meranie → Výstup, popri databáze správ. Základ obsahuje šesť polí; kontaktné podrobnosti, podklady a napustenie sú zbalené. Adresa nového zákazníka sa prenáša do miesta kontroly, kým používateľ nezadá odlišné miesto. Meranie zobrazuje vedľa seba pevnosť a tesnosť s tlakom a trvaním z profilu.
+
+Tlačidlo Upraviť profil otvorí opakované údaje technika, potrubia, meradiel, noriem a skúšobných nastavení. Zapamätať pre ďalšie revízie uloží whitelist do settings.sppProfile, ktorý prechádza validáciou, zálohou aj existujúcou trojcestnou synchronizáciou. Súbežná zmena profilu sa neprepíše bez kontroly. Úprava všeobecných nastavení firmy profil zachováva. Profil sa aplikuje automaticky iba pri novej správe; pri otvorenej možno doplniť len prázdne polia. Modelové vzory sa do profilu neukladajú.
+
+Profil neobsahuje zákazníka, dátumy, dĺžku, objem, namerané tlaky, vyhodnotenia ani potvrdenia RT. Koncový tlak sa prenesie z reálne zadaného počiatočného tlaku iba po výslovnom kliknutí na Potvrdzujem rovnaký koncový tlak; výsledok Vyhovela sa tým neurčuje. Pri výstupe sa z číselných údajov vytvorí slovný zápis, pokiaľ je pole prázdne. Automatický text sa aktualizuje pri zmene merania; ručne upravený text ostáva zachovaný. Pôvodné kontroly vydania a označenia modelových vzorov platia naďalej.
+
+Overenie: 28 cielených testov vrátane profilu pri nových správach, ochrany otvorených správ pri synchronizácii, backup/merge profilu, odmietnutia meraní v profile, rovnakého koncového tlaku, aktualizácie slovného zápisu a prenosu adresy. V prehliadači overené uloženie profilu cez rodičovskú aplikáciu a následné použitie v novej revízii.

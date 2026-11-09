@@ -119,7 +119,7 @@ async function saveEditor(form: HTMLFormElement): Promise<void> {
     const row: Tip = { ...(old || common), updatedAt: now, title: s('title'), category: s('category') as Tip['category'], manufacturer: s('manufacturer'), model: s('model'), code: s('code'), symptoms: s('symptoms'), solution: s('solution'), source: s('source'), verification: s('verification') as Tip['verification'], verifiedAt: s('verifiedAt'), jobId: old?.jobId || editor.sourceJobId || '' };
     next.tips = old ? next.tips.map(x => x.id === old.id ? row : x) : [...next.tips, row];
   }
-  if (editor.type === 'settings') next.settings = { technician: s('technician'), company: s('company'), baseAddress: s('baseAddress') };
+  if (editor.type === 'settings') next.settings = { ...next.settings, technician: s('technician'), company: s('company'), baseAddress: s('baseAddress') };
   const continuation = editor.type === 'customer' ? pendingEditor : null;
   const newCustomerId = continuation ? next.customers[next.customers.length - 1]?.id : undefined;
   await commit(validateData(next), editor.revision); dirty = false; closeEditor(); message('Uložené v zariadení.');
@@ -363,6 +363,15 @@ window.addEventListener('message',event=>{
  const sppFail=(error:unknown)=>{reply({type:'spp-error',message:error instanceof Error?error.message:'Operácia SPP sa nepodarila.'});fail(error);};
  if(event.data.type==='spp-dirty'){sppDirty=!!event.data.dirty;return;}
  if(event.data.type==='spp-ready'){reply({type:'spp-state',customers:data.customers.filter(c=>!c.archived),reports:data.sppReports||[],settings:data.settings});return;}
+ if(event.data.type==='spp-save-profile'){
+  void (async()=>{
+   if(state.workspace!=='real')throw Error('Profil ukladajte vo vlastnom pracovnom priestore.');
+   if(event.data.expectedProfile!==JSON.stringify(data.settings.sppProfile||null))throw Error('Profil bol medzitým zmenený. Skontrolujte aktuálne nastavenia a uložte ho znova.');
+   const next=structuredClone(data);next.settings.sppProfile={version:1,values:event.data.values};
+   const clean=validateData(next);await commit(clean);
+   reply({type:'spp-profile-saved',profile:clean.settings.sppProfile});message('Opakované údaje SPP sú uložené pre ďalšie revízie.');
+  })().catch(error=>reply({type:'spp-profile-error',message:error instanceof Error?error.message:'Profil sa nepodarilo uložiť.'}));return;
+ }
  if(event.data.type==='spp-lookup-company'){void companyByIco(String(event.data.ico||'')).then(company=>reply({type:'spp-company',company})).catch(error=>reply({type:'spp-error',message:error instanceof Error?error.message:'Firma sa nenašla.'}));return;}
  if(event.data.type==='spp-delete'){
   const id=String(event.data.id||'');if(!/^[a-zA-Z0-9_-]+$/.test(id))return;
