@@ -43,3 +43,13 @@ Staré TPP 704 01:2009: str. 24–25, čl. 7.7 uvádza minimum 5 kPa, ustálenie
 Úprava aplikácie: opravená zámena 1,5 × MOP za 15 kPa pri kontrole tesnosti v pracovnej predvoľbe NTL; doplnené konkrétne overené odkazy na STN a stav dostupnosti nového TPP. Časy a minimum 5 kPa zostávajú výslovne pracovnou predvoľbou do porovnania s úplným TPP 2026. Žiadna migrácia uložených meraní ani automatické potvrdenie zhody.
 
 Overenie tejto úpravy: 19 cielených testov SPP prešlo, vrátane nového prípadu 6 kPa a hranice 15/15,01 kPa pri MOP 2 kPa.
+
+## Vyplnený modelový vzor Cu d22
+
+V SPP → Formulár → Šablóna domového plynovodu je tlačidlo „Otvoriť vyplnený vzor“. Založí nový samostatný rozpracovaný záznam VZOR-RS, s modelovým zákazníkom, modelovým RT bez reálnych oprávnení, technickým opisom, fiktívnymi meraniami, výsledkami a ukážkou zápisu o napustení. Kontakty sa neukladajú do adresára. Existujúca správa sa neprepisuje.
+
+Príklad predpokladá Cu 22 × 1 mm, 20 m, približne 6,3 l samotnej rúry bez tvaroviek, MOP a prevádzkový tlak 2 kPa. Modelová pevnosť 5 → 5 kPa a tesnosť 2 → 2 kPa trvajú po 15 min s oddeleným ustálením. Hrúbka steny, dĺžka, objem, meradlo aj výsledky sú výslovne fiktívne. Časy a minimum tlaku nie sú deklarované ako overené podľa TPP 2026. Potvrdenie RT aj pôsobnosti TPP ostávajú nepotvrdené.
+
+Príznak exampleMode sa ukladá v payload a zachováva pri kópii. Vzor možno uložiť iba v stave draft. Každá strana náhľadu aj tlače obsahuje výrazné označenie VZOR a vodoznak. Tlač vzoru je dovolená bez kontroly určenej na vydanie skutočnej správy. Nová skutočná správa začína bez modelových meraní.
+
+Testy overujú oddelené uloženie, opätovné načítanie, blokovanie vydania, vypnutie ukladania kontaktu, označenie všetkých štyroch strán, zachovanie označenia pri kópii a pôvodnú kontrolu skutočných správ.

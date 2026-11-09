@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 function screen(){const html=fs.readFileSync('public/spp-app.html','utf8'),script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-const header=html.split('<script>')[0],ids=new Map(),fields=[],outputs=new Map(),docEvents={},winEvents={},sent=[],alerts=[];
+const header=html.split('<script>')[0],ids=new Map(),fields=[],outputs=new Map(),docEvents={},winEvents={},sent=[],alerts=[],printed=[];
 function node(attrs='',tag='input',body=''){
  const at=n=>attrs.match(new RegExp('(?:^|\\s)'+n+'="([^"]*)"'))?.[1]||'';
  const n={id:at('id'),dataset:{},type:at('type'),defaultValue:at('value'),value:at('value'),checked:/ checked/.test(attrs),defaultChecked:/ checked/.test(attrs),hidden:false,disabled:false,innerHTML:'',textContent:'',width:600,height:280,clientWidth:300,listeners:{},classList:{toggle(){}},addEventListener(k,v){this.listeners[k]=v},getContext(){return {clearRect(){},drawImage(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}}},getBoundingClientRect(){return {left:0,top:0,width:300,height:140}},toDataURL(){return 'data:image/png;base64,abc'},setPointerCapture(){},matches(s){return s.includes('[data-field]')&&!!this.dataset.field||s.includes('#customer-select')&&this.id==='customer-select'}};
@@ -20,11 +20,11 @@ for(let i=0;i<8;i++)node('data-field="safe'+i+'"','select','<option>Neoverené</
 const views=[...header.matchAll(/<section id="([^"]+)" class="view/g)].map(m=>ids.get(m[1]));
 const clears=[node('data-target="tech-sign"','button'),node('data-target="customer-sign"','button')];
 const document={querySelector(s){if(s.startsWith('#'))return ids.get(s.slice(1));let m=s.match(/^\[data-(field|output)(?:="([^"]+)"|=([^\]]+))\]$/);if(m)return m[1]==='field'?fields.find(x=>x.dataset.field===(m[2]||m[3])):outputs.get(m[2]||m[3]);throw Error('Selector '+s)},querySelectorAll(s){if(s==='[data-field]')return fields;if(s==='.tabs button')return tabs;if(s==='.view')return views;if(s==='.clear-sign')return clears;throw Error('Selectors '+s)},addEventListener(k,v){docEvents[k]=v},createElement(){return {click(){}}}};
-const parent={postMessage(m){sent.push(JSON.parse(JSON.stringify(m)))}},window={addEventListener(k,v){winEvents[k]=v},print(){}},location={origin:'https://spp.test'},crypto={randomUUID:()=> 'report-'+Math.random().toString(36).slice(2)};
+const parent={postMessage(m){sent.push(JSON.parse(JSON.stringify(m)))}},window={addEventListener(k,v){winEvents[k]=v},print(){printed.push(ids.get('printable').innerHTML)}},location={origin:'https://spp.test'},crypto={randomUUID:()=> 'report-'+Math.random().toString(36).slice(2)};
 new Function('document','window','parent','location','crypto','Image','alert','confirm','Blob','URL','setTimeout',script)(document,window,parent,location,crypto,class{},m=>alerts.push(m),()=>true,class{},{},()=>{});
 const deliver=m=>winEvents.message({origin:location.origin,source:parent,data:m});
 const el=id=>ids.get(id),field=name=>fields.find(x=>x.dataset.field===name);
-return {deliver,el,field,sent,alerts,tabs,docEvents,fields};
+return {deliver,el,field,sent,alerts,tabs,docEvents,fields,printed};
 
 }
 
@@ -122,3 +122,54 @@ test('Copper template cannot change a reviewed or issued report',()=>{
  }
 });
 
+
+test('Explicit Cu d22 example creates a separate marked draft with illustrative observations',()=>{
+ const h=start();change(h,'customerName','Skutočný zákazník');h.el('save').onclick();
+ const original=h.sent.at(-1).report;
+ h.deliver({type:'spp-state',customers:[],reports:[original],settings:{}});
+ h.deliver({type:'spp-saved',id:original.id,customerId:'',updatedAt:original.updatedAt});
+ h.el('new-copper-example').onclick();
+ assert.equal(h.field('exampleMode').checked,true);
+ assert.equal(h.el('example-notice').hidden,false);
+ assert.equal(h.field('state').disabled,true);
+ assert.match(h.field('reportNo').value,/^VZOR-RS-/);
+ assert.equal(h.field('strengthStart').value,'5.000');
+ assert.equal(h.field('tightStart').value,'2.000');
+ assert.equal(h.field('pressureBasisConfirmed').checked,false);
+ assert.equal(h.field('tppApplicability').value,'');
+ assert.match(h.field('technician').value,/VZOR/);
+ assert.equal(h.field('saveCustomer').checked,false);
+ h.el('save').onclick();
+ const saved=h.sent.at(-1);
+ assert.equal(saved.saveCustomer,false);assert.notEqual(saved.report.id,original.id);
+ assert.equal(original.customerName,'Skutočný zákazník');
+ assert.equal(JSON.parse(saved.report.payload).exampleMode,true);
+ const reopened=screen();reopened.deliver({type:'spp-state',customers:[],reports:[saved.report],settings:{}});
+ reopened.el('archive-list').onclick({target:{closest:()=>({dataset:{open:saved.report.id}})}});
+ assert.equal(reopened.field('exampleMode').checked,true);
+ assert.equal(reopened.field('state').disabled,true);
+ reopened.el('print').onclick();
+ assert.equal(reopened.printed.length,1);
+ assert.equal((reopened.printed[0].match(/VZOR – MODELOVÉ ÚDAJE – NEJDE O VYKONANÚ REVÍZIU/g)||[]).length,4);
+ assert.match(reopened.printed[0],/TPP 2026/);
+});
+
+test('Example cannot be issued or enter contacts; copies retain provenance and a new real report is clean',()=>{
+ const h=start();h.el('new-copper-example').onclick();
+ h.field('state').value='issued';h.el('save').onclick();
+ assert.equal(h.sent.filter(m=>m.type==='spp-save').length,0);
+ assert.match(h.el('check-list').innerHTML,/VZOR obsahuje modelové/);
+ h.field('state').value='draft';h.field('saveCustomer').checked=true;h.el('save').onclick();
+ const saved=h.sent.at(-1);assert.equal(saved.saveCustomer,false);
+ h.deliver({type:'spp-saved',id:saved.report.id,customerId:'',updatedAt:saved.report.updatedAt});
+ h.el('duplicate').onclick();
+ assert.equal(h.field('exampleMode').checked,true);assert.match(h.field('reportNo').value,/^VZOR-/);
+ assert.equal(h.field('strengthStart').value,'');assert.equal(h.field('conclusion').value,'');
+ h.el('print').onclick();assert.match(h.printed.at(-1),/VZOR – MODELOVÉ ÚDAJE/);
+ h.el('new').onclick();
+ assert.equal(h.field('exampleMode').checked,false);assert.equal(h.el('example-notice').hidden,true);
+ assert.equal(h.field('state').disabled,false);assert.equal(h.field('saveCustomer').disabled,false);
+ assert.equal(h.field('customerName').value,'');assert.equal(h.field('strengthStart').value,'');
+ h.el('print').onclick();assert.match(h.alerts.at(-1),/PDF nemožno vytvoriť/);
+ assert.equal(h.printed.length,1,'an ordinary incomplete report still cannot print');
+});

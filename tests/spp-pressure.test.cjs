@@ -46,5 +46,5 @@ test('A copy clears evidence and confirmations while preserving reusable equipme
 test('Every saved field has one input and the script parses',()=>{
  const fields=[...html.split('<script>')[0].matchAll(/data-field="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(fields).size,fields.length);
  assert.doesNotThrow(()=>new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]));
- assert.match(html,/function printReport\(\)\{const list=issues\(true\)/);
+ 
 });
