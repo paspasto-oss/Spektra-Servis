@@ -46,3 +46,32 @@ test('SPP database opens, saves incomplete drafts and reopens saved fields after
  assert.equal(next.field('scope').value,'Rozpracované potrubie');
  next.el('save').onclick();assert.equal(next.sent.at(-1).expectedUpdatedAt,report.updatedAt);
 });
+
+function change(h,key,value){const el=h.field(key);if(el.type==='checkbox')el.checked=value;else el.value=value;el.listeners.input?.();h.docEvents.input({target:el});}
+function start(){const h=screen();h.deliver({type:'spp-state',customers:[],reports:[],settings:{}});h.el('new').onclick();return h;}
+test('New SPP pressure plan fills only targets and follows volume without inventing measurements',()=>{
+ const h=start();assert.equal(h.field('strengthPressure').value,'');assert.equal(h.field('tightPressure').value,'');
+ change(h,'mop','2');change(h,'operatingPressure','2');change(h,'volume','50');
+ assert.equal(h.field('strengthPressure').value,'5');assert.equal(h.field('tightPressure').value,'2');assert.equal(h.field('strengthMinutes').value,'15');assert.equal(h.field('settlingMinutes').value,'15');
+ assert.equal(h.field('strengthStart').value,'');assert.equal(h.field('strengthAssessment').value,'');assert.equal(h.field('pressureBasisConfirmed').checked,false);
+ change(h,'volume','51');assert.equal(h.field('strengthMinutes').value,'30');
+ change(h,'volume','');assert.equal(h.field('strengthMinutes').value,'');
+ change(h,'volume','50');change(h,'pressureMode','combined');assert.equal(h.field('tightPressure').value,'5');
+ change(h,'strengthStart','5.001');assert.equal(h.field('tightStart').value,'5.001');assert.equal(h.field('tightEnd').value,'');
+});
+test('Recorded tests are not overwritten by preset and copied reports require fresh evidence',()=>{
+ const h=start();change(h,'mop','2');change(h,'operatingPressure','2');change(h,'volume','50');change(h,'strengthStart','5');change(h,'strengthEnd','5');
+ h.el('apply-pressure-preset').onclick();assert.match(h.alerts.at(-1),/už zaznamenanú/);assert.equal(h.field('strengthStart').value,'5');
+ h.field('pressureBasisConfirmed').checked=true;h.el('duplicate').onclick();assert.equal(h.field('strengthStart').value,'');assert.equal(h.field('strengthEnd').value,'');assert.equal(h.field('pressureBasisConfirmed').checked,false);
+});
+test('Legacy reports preserve saved 600/6 kPa and 180-minute measurements on load',()=>{
+ const h=screen(),report={id:'legacy',reportNo:'RS-2026-7',inspectionDate:'2026-11-01',state:'draft',updatedAt:'2026-11-01T12:00:00Z',payload:JSON.stringify({strengthPressure:'600',tightPressure:'6',strengthMinutes:'180',tightMinutes:'180',strengthStart:'600',strengthEnd:'600'})};
+ h.deliver({type:'spp-state',customers:[],reports:[report],settings:{}});h.el('archive-list').onclick({target:{closest:()=>({dataset:{open:'legacy'}})}});
+ assert.equal(h.field('strengthPressure').value,'600');assert.equal(h.field('tightPressure').value,'6');assert.equal(h.field('strengthMinutes').value,'180');assert.equal(h.field('strengthStart').value,'600');assert.equal(h.field('pressurePreset').value,'manual');assert.equal(h.field('pressureMode').value,'');
+ h.el('save').onclick();const saved=JSON.parse(h.sent.at(-1).report.payload);assert.equal(saved.strengthStart,'600');
+});
+test('Draft print requires a complete pressure test and exposes the missing fields',()=>{
+ const h=start();change(h,'customerName','Test');change(h,'scope','Testovací úsek');h.el('print').onclick();
+ assert.match(h.alerts.at(-1),/PDF nemožno vytvoriť/);assert.match(h.el('check-list').innerHTML,/skutočne namerané tlaky/);assert.match(h.el('printable').innerHTML,/PRACOVNÝ NÁHĽAD/);
+});
+
