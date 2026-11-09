@@ -33,6 +33,12 @@ test('Joint tests reject inconsistent observations and instruments',()=>{
  assert.deepEqual(Array.from(api.pressureIssues(joint)),[]);
  for(const change of [{tightPressure:'2'},{tightStartTime:'09:30'},{tightMinutes:'30'},{tightGauge:'Gauge B'}])assert.ok(api.pressureIssues({...joint,...change}).some(s=>s.includes('Spoločná skúška')));
 });
+test('Low-pressure tightness uses the 15 kPa ceiling in EN 1775 6.6.2, not 150 percent of MOP',()=>{
+ for(const pressure of ['3.01','6','15'])assert.deepEqual(Array.from(api.pressureIssues(completed({tightPressure:pressure,tightStart:pressure,tightEnd:pressure}))),[],pressure);
+ for(const pressure of ['1.99','15.01'])assert.ok(api.pressureIssues(completed({tightPressure:pressure,tightStart:pressure,tightEnd:pressure})).some(x=>x.includes('6.6.2')),pressure);
+ const joint=completed({pressureMode:'combined',strengthPressure:'5',tightPressure:'15.01',tightStart:'15.01',tightEnd:'15.01'});
+ assert.ok(api.pressureIssues(joint).some(x=>x.includes('6.6.2')));
+});
 test('A copy clears evidence and confirmations while preserving reusable equipment and targets',()=>{
  const d=completed({strengthGauge:'Gauge A',procedureArticle:'RT reference',tempStart:'20',safe0:'Potvrdené'});api.clearPressureEvidence(d);
  assert.equal(d.strengthStart,'');assert.equal(d.tightAssessment,'');assert.equal(d.tempStart,'');assert.equal(d.safe0,'Neoverené');assert.equal(d.pressureBasisConfirmed,false);assert.equal(d.strengthPressure,'5');assert.equal(d.strengthGauge,'Gauge A');assert.equal(d.procedureArticle,'RT reference');
